@@ -2,6 +2,7 @@
 
 const path = require("node:path");
 const dotenv = require("dotenv");
+const { loadAIProviderSettings } = require("./ai-provider");
 
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
@@ -22,10 +23,5 @@ module.exports = Object.freeze({
   port: parsePort(process.env.PORT),
   githubToken: (process.env.GITHUB_TOKEN || "").trim(),
   corsOrigins,
-  bharatCode: Object.freeze({
-    apiKey: (process.env.BHARATCODE_API_KEY || "").trim(),
-    baseURL: (process.env.BHARATCODE_BASE_URL || "").trim(),
-    model: (process.env.BHARATCODE_MODEL || "").trim(),
-    timeoutMs: 20000
-  })
+  aiProvider: loadAIProviderSettings()
 });

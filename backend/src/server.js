@@ -5,9 +5,13 @@ const { config } = require("./config");
 
 const server = createApp().listen(config.port, () => {
   console.log(`TRACE LENS server listening on port ${config.port}.`);
-  console.log(config.bharatCode.apiKey && config.bharatCode.baseURL && config.bharatCode.model
-    ? "BharatCode AI is configured."
-    : "BharatCode AI is unavailable; rule-based analysis remains enabled.");
+  if (config.aiProvider.configurationError) {
+    console.warn(`${config.aiProvider.providerName} configuration is invalid: ${config.aiProvider.configurationError}`);
+  } else if (config.aiProvider.apiKey && config.aiProvider.baseURL && config.aiProvider.model) {
+    console.log(`${config.aiProvider.providerName} credentials are configured; provider connectivity has not been checked.`);
+  } else {
+    console.log(`${config.aiProvider.providerName} is unavailable; rule-based analysis remains enabled.`);
+  }
 });
 
 server.on("error", (error) => {

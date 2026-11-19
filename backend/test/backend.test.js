@@ -3,9 +3,16 @@
 const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const test = require("node:test");
+const OpenAI = require("openai");
 const { createApp } = require("../src/app");
+const {
+  DEFAULT_BHARATCODE_BASE_URL,
+  DEFAULT_NVIDIA_NIM_BASE_URL,
+  SUPPORTED_NVIDIA_NIM_MODEL,
+  loadAIProviderSettings
+} = require("../src/config/ai-provider");
 const { AnalysisService, verifyAiFinding } = require("../src/services/analysis-service");
-const { BharatCodeService, parseFindings } = require("../src/services/bharatcode-service");
+const { OpenAICompatibleService } = require("../src/services/openai-compatible-service");
 const { GitHubService } = require("../src/services/github-service");
 const { analyzeWithRules } = require("../src/services/rule-analysis");
 const { AppError } = require("../src/utils/app-error");
@@ -35,6 +42,7 @@ test("rule analysis reports only a code value that conflicts with an actual docu
   const findings = analyzeWithRules(changedFiles, documents);
   assert.equal(findings.length, 1);
   assert.equal(findings[0].severity, "Medium");
+  assert.equal(findings[0].confidence, "High");
   assert.equal(findings[0].codeFile, "src/config/http.js");
   assert.equal(findings[0].docsFile, "README.md");
   assert.equal(findings[0].codeEvidence, "requestTimeoutMs: 30000");
@@ -120,6 +128,7 @@ test("rule analysis detects changed supported ranges against documented ranges",
   const findings = analyzeWithRules(rangeChange, rangeDocs);
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].confidence, "High");
   assert.equal(findings[0].codeEvidence, "if (days < 1 || days > 14) throw new RangeError(\"days must be between 1 and 14\");");
   assert.equal(findings[0].docsEvidence, rangeDocs[0].content);
   assert.deepEqual(
@@ -215,25 +224,25 @@ test("rule analysis notes a newly exported symbol absent from the fetched docs",
   );
   assert.equal(findings.length, 1);
   assert.equal(findings[0].severity, "Low");
+  assert.equal(findings[0].confidence, "Low");
   assert.match(findings[0].docsEvidence, /createInvoice/);
   assert.match(findings[0].codeEvidence, /export function createInvoice/);
 });
 
-test("BharatCode client uses the configured model and parses a mock OpenAI-compatible response", async () => {
+test("OpenAI-compatible provider uses configured endpoint, credentials, and model", async () => {
   let request;
-  const mockClient = {
-    chat: {
-      completions: {
-        create: async (value) => {
-          request = value;
-          return { choices: [{ message: { content: "{\"findings\":[]}" } }] };
-        }
-      }
-    }
-  };
-  const ai = new BharatCodeService({
+  const baseURL = "https://bharatcode.example.test/api/model/v1";
+  const mockClient = createMockOpenAIClient(async (url, options) => {
+    request = {
+      url: String(url),
+      authorization: new Headers(options.headers).get("authorization"),
+      body: JSON.parse(options.body)
+    };
+    return mockChatCompletionResponse("{\"findings\":[]}");
+  }, { baseURL });
+  const ai = new OpenAICompatibleService({
     apiKey: "test-key-not-sent",
-    baseURL: "https://bharatcode.example.test/v1",
+    baseURL,
     model: "configured-test-model",
     timeoutMs: 50
   }, mockClient);
@@ -243,10 +252,253 @@ test("BharatCode client uses the configured model and parses a mock OpenAI-compa
     changedFiles,
     documents
   });
+  const context = JSON.parse(request.body.messages[1].content);
   assert.deepEqual(findings, []);
-  assert.equal(request.model, "configured-test-model");
-  assert.equal(request.messages[1].role, "user");
-  assert.throws(() => parseFindings("not json"), (error) => error.code === "INVALID_BHARATCODE_RESPONSE");
+  assert.equal(request.url, `${baseURL}/chat/completions`);
+  assert.equal(request.authorization, "Bearer test-key-not-sent");
+  assert.equal(request.body.model, "configured-test-model");
+  assert.equal(request.body.messages[1].role, "user");
+  assert.equal(context.changedFiles[0].patch, changedFiles[0].patch);
+  assert.equal(context.documentation[0].content, documents[0].content);
+  assert.match(request.body.messages[0].content, /changed diff line/);
+  assert.equal(JSON.stringify(request.body).includes("test-key-not-sent"), false);
+});
+
+test("OpenAI-compatible provider rejects malformed and truncated model responses", async () => {
+  const responses = [
+    { content: "not json", expected: "INVALID_AI_PROVIDER_RESPONSE" },
+    { content: "{\"unexpected\":[]}", expected: "INVALID_AI_PROVIDER_RESPONSE" },
+    { content: "{\"findings\":[]}", finishReason: "length", expected: "AI_PROVIDER_INCOMPLETE_RESPONSE" }
+  ];
+
+  for (const response of responses) {
+    const settings = loadAIProviderSettings({
+      AI_PROVIDER: "nvidia-nim",
+      NVIDIA_NIM_API_KEY: "test-key-not-sent",
+      NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+    });
+    const ai = new OpenAICompatibleService(settings, createMockOpenAIClient(
+      async () => mockChatCompletionResponse(response.content, response.finishReason),
+      { baseURL: settings.baseURL }
+    ));
+
+    await assert.rejects(ai.analyze({
+      pullRequest: { number: 2, title: "Test change", body: "" },
+      changedFiles,
+      documents
+    }), (error) => error.code === response.expected);
+  }
+});
+
+test("NVIDIA NIM sends mocked Chat Completions to the documented model endpoint", async () => {
+  const settings = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    NVIDIA_NIM_BASE_URL: DEFAULT_NVIDIA_NIM_BASE_URL,
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+  });
+  let request;
+  const service = new OpenAICompatibleService(settings, createMockOpenAIClient(async (url, options) => {
+    request = {
+      url: String(url),
+      authorization: new Headers(options.headers).get("authorization"),
+      body: JSON.parse(options.body)
+    };
+    return mockChatCompletionResponse("{\"findings\":[]}");
+  }, { baseURL: settings.baseURL }));
+
+  assert.equal(settings.providerName, "NVIDIA NIM");
+  assert.equal(service.configured, true);
+  assert.deepEqual(await service.analyze({
+    pullRequest: { number: 8, title: "Update timeout", body: "" },
+    changedFiles,
+    documents
+  }), []);
+  assert.equal(request.url, `${DEFAULT_NVIDIA_NIM_BASE_URL}/chat/completions`);
+  assert.equal(request.authorization, "Bearer test-key-not-sent");
+  assert.equal(request.body.model, SUPPORTED_NVIDIA_NIM_MODEL);
+  assert.equal(JSON.stringify(request.body).includes("test-key-not-sent"), false);
+});
+
+test("NVIDIA NIM reports a missing key or model without making a request", async () => {
+  const missingKey = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+  });
+  assert.equal(missingKey.providerName, "NVIDIA NIM");
+  assert.equal(missingKey.baseURL, DEFAULT_NVIDIA_NIM_BASE_URL);
+  assert.deepEqual(missingKey.missingSettings, ["NVIDIA_NIM_API_KEY"]);
+  const missingKeyService = new OpenAICompatibleService(missingKey);
+  assert.equal(missingKeyService.configured, false);
+  await assert.rejects(missingKeyService.analyze({
+    pullRequest: { number: 8, title: "Update timeout", body: "" },
+    changedFiles,
+    documents
+  }), (error) => error.code === "AI_PROVIDER_NOT_CONFIGURED");
+
+  const missingModel = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent"
+  });
+  assert.deepEqual(missingModel.missingSettings, ["NVIDIA_NIM_MODEL"]);
+  assert.equal(new OpenAICompatibleService(missingModel).configured, false);
+
+  const autoSelected = loadAIProviderSettings({
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL,
+    BHARATCODE_API_KEY: "legacy-test-key",
+    BHARATCODE_MODEL: "legacy-model"
+  });
+  assert.equal(autoSelected.providerName, "NVIDIA NIM");
+  const explicitlyLegacy = loadAIProviderSettings({
+    AI_PROVIDER: "bharatcode",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    BHARATCODE_API_KEY: "legacy-test-key",
+    BHARATCODE_MODEL: "legacy-model"
+  });
+  assert.equal(explicitlyLegacy.providerName, "BharatCode");
+});
+
+test("BharatCode remains selectable and sends mocked requests to its existing endpoint", async () => {
+  const settings = loadAIProviderSettings({
+    AI_PROVIDER: "bharatcode",
+    BHARATCODE_API_KEY: "test-key-not-sent",
+    BHARATCODE_MODEL: "legacy-test-model"
+  });
+  let requestURL;
+  const service = new OpenAICompatibleService(settings, createMockOpenAIClient(async (url) => {
+    requestURL = String(url);
+    return mockChatCompletionResponse("{\"findings\":[]}");
+  }, { baseURL: settings.baseURL }));
+
+  assert.equal(settings.providerName, "BharatCode");
+  assert.equal(service.model, "legacy-test-model");
+  assert.deepEqual(await service.analyze({
+    pullRequest: { number: 8, title: "Update timeout", body: "" },
+    changedFiles,
+    documents
+  }), []);
+  assert.equal(requestURL, `${DEFAULT_BHARATCODE_BASE_URL}/chat/completions`);
+});
+
+test("generic AI settings validate all required provider values and preserve BharatCode aliases", async () => {
+  const missingCredentials = loadAIProviderSettings({});
+  assert.equal(missingCredentials.providerName, "OpenAI-compatible provider");
+  assert.equal(missingCredentials.baseURL, "");
+  const missingService = new OpenAICompatibleService(missingCredentials);
+  assert.equal(missingService.configured, false);
+  assert.deepEqual(missingService.missingSettings, ["AI_API_KEY", "AI_BASE_URL", "AI_MODEL"]);
+  await assert.rejects(missingService.analyze({
+    pullRequest: { number: 2, title: "Test change", body: "" },
+    changedFiles,
+    documents
+  }), (error) => error.code === "AI_PROVIDER_NOT_CONFIGURED");
+
+  assert.equal(new OpenAICompatibleService(loadAIProviderSettings({
+    AI_MODEL: "configured-test-model"
+  })).configured, false);
+  assert.equal(new OpenAICompatibleService(loadAIProviderSettings({
+    AI_API_KEY: "test-key-not-sent"
+  })).configured, false);
+
+  const configured = loadAIProviderSettings({
+    AI_PROVIDER: "openai-compatible",
+    AI_API_KEY: "test-key-not-sent",
+    AI_BASE_URL: "https://provider.example.test/v1",
+    AI_MODEL: "configured-test-model"
+  });
+  assert.equal(configured.providerName, "OpenAI-compatible provider");
+  assert.equal(new OpenAICompatibleService(configured).configured, true);
+  assert.equal(new OpenAICompatibleService(configured).client.baseURL, "https://provider.example.test/v1");
+
+  const legacy = loadAIProviderSettings({
+    BHARATCODE_API_KEY: "test-key-not-sent",
+    BHARATCODE_MODEL: "legacy-test-model"
+  });
+  assert.equal(legacy.providerName, "BharatCode");
+  assert.equal(legacy.baseURL, DEFAULT_BHARATCODE_BASE_URL);
+  assert.equal(new OpenAICompatibleService(legacy).client.baseURL, DEFAULT_BHARATCODE_BASE_URL);
+  assert.equal(loadAIProviderSettings({
+    BHARATCODE_API_KEY: "legacy-key",
+    BHARATCODE_MODEL: "legacy-model",
+    AI_API_KEY: "generic-key",
+    AI_BASE_URL: "https://provider.example.test/v1",
+    AI_MODEL: "generic-model"
+  }).providerName, "OpenAI-compatible provider");
+
+  const invalid = loadAIProviderSettings({
+    AI_API_KEY: "test-key-not-sent",
+    AI_MODEL: "configured-test-model",
+    AI_BASE_URL: "http://example.test/v1"
+  });
+  const invalidService = new OpenAICompatibleService(invalid);
+  assert.equal(invalid.configurationError, "AI_BASE_URL must be a valid HTTPS URL.");
+  assert.equal(invalidService.configured, false);
+  assert.equal(invalidService.client, null);
+  await assert.rejects(invalidService.analyze({
+    pullRequest: { number: 2, title: "Test change", body: "" },
+    changedFiles,
+    documents
+  }), (error) => error.code === "AI_PROVIDER_INVALID_CONFIGURATION");
+
+  assert.match(loadAIProviderSettings({ AI_BASE_URL: "not a URL" }).configurationError, /valid HTTPS URL/);
+  assert.match(loadAIProviderSettings({ AI_PROVIDER: "not-supported" }).configurationError, /AI_PROVIDER must be/);
+});
+
+test("OpenAI-compatible provider maps authentication, model, rate-limit, busy, and timeout errors", async () => {
+  const failures = [
+    { status: 401, code: "invalid_api_key", expected: "AI_PROVIDER_AUTHENTICATION_FAILED" },
+    { status: 429, code: "rate_limit_exceeded", expected: "AI_PROVIDER_RATE_LIMITED" },
+    { status: 410, code: "retired_model", expected: "AI_PROVIDER_MODEL_UNAVAILABLE" },
+    { status: 503, code: "server_busy", expected: "AI_PROVIDER_BUSY" },
+    { status: 500, code: "provider_error", expected: "AI_PROVIDER_API_ERROR" }
+  ];
+
+  for (const failure of failures) {
+    const settings = loadAIProviderSettings({
+      AI_PROVIDER: "nvidia-nim",
+      NVIDIA_NIM_API_KEY: "test-key-not-sent",
+      NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+    });
+    const ai = new OpenAICompatibleService(settings, createMockOpenAIClient(async () => new Response(JSON.stringify({
+      error: {
+        message: "provider detail must not be surfaced",
+        type: "provider_error",
+        code: failure.code
+      }
+    }), { status: failure.status, headers: { "content-type": "application/json" } }), {
+      baseURL: settings.baseURL
+    }));
+
+    await assert.rejects(ai.analyze({
+      pullRequest: { number: 2, title: "Test change", body: "" },
+      changedFiles,
+      documents
+    }), (error) => {
+      assert.equal(error.code, failure.expected);
+      assert.equal(error.message.includes("provider detail"), false);
+      return true;
+    });
+  }
+
+  const timeoutSettings = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+  });
+  const timeoutService = new OpenAICompatibleService({
+    ...timeoutSettings,
+    timeoutMs: 5
+  }, createMockOpenAIClient((_url, { signal }) => new Promise((_resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  }), { timeout: 5, baseURL: timeoutSettings.baseURL }));
+
+  await assert.rejects(timeoutService.analyze({
+    pullRequest: { number: 2, title: "Test change", body: "" },
+    changedFiles,
+    documents
+  }), (error) => error.code === "AI_PROVIDER_TIMEOUT");
 });
 
 test("AI evidence is retained only when both excerpts exist in fetched sources", () => {
@@ -327,13 +579,18 @@ test("analysis uses rule fallback when AI is not configured and stores retrievab
   };
   const analysis = new AnalysisService({
     githubService,
-    bharatCodeService: { configured: false, analyze: async () => assert.fail("AI should not be called") }
+    aiService: {
+      configured: false,
+      providerName: "Example Provider",
+      missingSettings: ["AI_API_KEY"],
+      analyze: async () => assert.fail("AI should not be called")
+    }
   });
   const result = await analysis.analyzePullRequest({ owner: "acme", repo: "payments", pullNumber: 8, useAi: true });
 
   assert.equal(result.provider, "rules");
   assert.equal(result.ai.used, false);
-  assert.match(result.warnings.join(" "), /not configured/);
+  assert.match(result.warnings.join(" "), /not fully configured/);
   assert.equal(result.findings.length, 1);
   assert.deepEqual(documentationRankedWith, changedFiles);
   assert.deepEqual(analysis.getResult(result.analysisId), result);
@@ -360,26 +617,39 @@ test("analysis discards unverified AI findings and keeps verified results", asyn
   });
   const analysis = new AnalysisService({
     githubService,
-    bharatCodeService: {
+    aiService: {
       configured: true,
+      providerName: "NVIDIA NIM",
       analyze: async () => [validAiFinding, { ...validAiFinding, codeEvidence: "invented code" }]
     }
   });
   const result = await analysis.analyzePullRequest({ owner: "acme", repo: "payments", pullNumber: 8, useAi: true });
 
-  assert.equal(result.provider, "BharatCode + rules");
-  assert.ok(result.findings.some((finding) => finding.source === "bharatcode"));
+  assert.equal(result.provider, "NVIDIA NIM + rules");
+  assert.ok(result.findings.some((finding) => finding.source === "ai"));
+  assert.equal(result.findings.find((finding) => finding.source === "ai").confidence, "Medium");
   assert.ok(result.warnings.some((warning) => warning.includes("discarded")));
   assert.equal(result.findings.filter((finding) => finding.codeEvidence === "invented code").length, 0);
 });
 
-test("analysis falls back to rules after a BharatCode request failure", async () => {
+test("analysis falls back to rules after a provider request failure", async () => {
+  const settings = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+  });
+  const aiService = new OpenAICompatibleService(settings, createMockOpenAIClient(async () => new Response(JSON.stringify({
+    error: {
+      message: "provider response must not be exposed",
+      type: "server_error",
+      code: "provider_error"
+      }
+  }), { status: 500, headers: { "content-type": "application/json" } }), {
+    baseURL: settings.baseURL
+  }));
   const analysis = new AnalysisService({
     githubService: createMockGitHubService(),
-    bharatCodeService: {
-      configured: true,
-      analyze: async () => { throw new AppError(502, "BHARATCODE_UNAVAILABLE", "BharatCode AI could not complete the request."); }
-    }
+    aiService
   });
   const result = await analysis.analyzePullRequest({ owner: "acme", repo: "payments", pullNumber: 8, useAi: true });
 
@@ -499,7 +769,7 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
       getPullRequestFiles: async () => ({ files: changedFiles, truncated: false }),
       getDocumentation: async () => ({ documents, truncated: false })
     },
-    bharatCodeService: { configured: false },
+    aiService: { providerName: "Example Provider", configured: false, missingSettings: [] },
     analysisService: {
       analyzePullRequest: async ({ useAi }) => {
         analysisRequestCount += 1;
@@ -511,7 +781,7 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
       }
     }
   };
-  const app = createApp({ services });
+  const app = createApp({ services, corsOrigins: ["https://frontend.example"] });
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = `http://127.0.0.1:${server.address().port}`;
@@ -520,6 +790,19 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     const health = await fetch(`${address}/api/health`).then((response) => response.json());
     assert.equal(health.success, true);
     assert.equal(health.data.status, "ok");
+    assert.equal(health.data.ai.connectivity, "not_checked");
+    assert.equal(health.data.ai.configured, false);
+    assert.equal(health.data.ai.provider, "Example Provider");
+    assert.equal(JSON.stringify(health).includes("apiKey"), false);
+
+    const allowedOrigin = await fetch(`${address}/api/health`, {
+      headers: { Origin: "https://frontend.example" }
+    });
+    assert.equal(allowedOrigin.headers.get("access-control-allow-origin"), "https://frontend.example");
+    const deniedOrigin = await fetch(`${address}/api/health`, {
+      headers: { Origin: "https://untrusted.example" }
+    });
+    assert.equal(deniedOrigin.headers.get("access-control-allow-origin"), null);
 
     const invalid = await fetch(`${address}/api/repositories/validate`, {
       method: "POST",
@@ -575,6 +858,13 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     assert.equal(frontend.status, 200);
     assert.match(await frontend.text(), /Analyze a GitHub pull request/);
 
+    const frontendScript = await fetch(`${address}/analysis-results.js`);
+    assert.equal(frontendScript.status, 200);
+    const frontendSource = await frontendScript.text();
+    assert.match(frontendSource, /health\.ai\.provider/);
+    assert.match(frontendSource, /analysis was used/);
+    assert.match(frontendSource, /rule-based fallback/);
+
     const missingPage = await fetch(`${address}/backend/src/config/env.js`);
     assert.equal(missingPage.status, 404);
 
@@ -602,4 +892,31 @@ function createMockGitHubService(overrides = {}) {
     getPullRequestFiles: async () => ({ files: values.changed, truncated: false }),
     getDocumentation: async () => ({ documents: values.docs, truncated: false })
   };
+}
+
+function createMockOpenAIClient(fetchFn, options = {}) {
+  return new OpenAI({
+    apiKey: "test-key-not-sent",
+    baseURL: options.baseURL || DEFAULT_BHARATCODE_BASE_URL,
+    timeout: options.timeout || 1000,
+    maxRetries: 0,
+    fetch: fetchFn
+  });
+}
+
+function mockChatCompletionResponse(content, finishReason = "stop") {
+  return new Response(JSON.stringify({
+    id: "chatcmpl-test",
+    object: "chat.completion",
+    created: 0,
+    model: "configured-test-model",
+    choices: [{
+      index: 0,
+      message: { role: "assistant", content },
+      finish_reason: finishReason
+    }]
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" }
+  });
 }

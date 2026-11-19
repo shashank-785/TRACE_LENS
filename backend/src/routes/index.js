@@ -14,8 +14,11 @@ function createApiRouter(services) {
         status: "ok",
         github: { authenticationConfigured: Boolean(config.githubToken) },
         ai: {
-          provider: "BharatCode",
-          configured: services.bharatCodeService.configured
+          provider: services.aiService.providerName,
+          configured: services.aiService.configured,
+          connectivity: "not_checked",
+          missingSettings: services.aiService.missingSettings || [],
+          configurationError: services.aiService.configurationError || ""
         }
       }
     });

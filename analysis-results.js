@@ -16,6 +16,8 @@ const statusFilter = document.getElementById("statusFilter");
 const emptyState = document.getElementById("emptyState");
 const loadingState = document.getElementById("loadingState");
 const errorState = document.getElementById("errorState");
+const analysisErrorMessage = document.getElementById("analysisErrorMessage");
+const retryAnalysisButton = document.getElementById("retryAnalysis");
 const resultsCount = document.getElementById("resultsCount");
 const toast = document.getElementById("resultsToast");
 const repositoryForm = document.getElementById("repositoryForm");
@@ -23,7 +25,7 @@ const repositoryInput = document.getElementById("repositoryUrl");
 const validateRepositoryButton = document.getElementById("validateRepositoryButton");
 const pullRequestSelect = document.getElementById("pullRequestSelect");
 const analyzePullRequestButton = document.getElementById("analyzePullRequestButton");
-const useBharatCodeCheckbox = document.getElementById("useBharatCode");
+const useAIProviderCheckbox = document.getElementById("useAi");
 const backendStatus = document.getElementById("backendStatus");
 const workflowStatus = document.getElementById("workflowStatus");
 const API_BASE_URL = `${window.location.origin}/api`;
@@ -36,6 +38,23 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[character]);
+}
+
+function setAnalysisDataState(pillText, labelText, footerText) {
+  document.getElementById("analysisDataPill").lastChild.textContent = ` ${pillText}`;
+  document.getElementById("analysisDataLabel").lastChild.textContent = labelText;
+  document.getElementById("analysisFooterStatus").textContent = footerText;
+}
+
+function clearDisplayedResults() {
+  findings = [];
+  loaded = false;
+  findingsList.replaceChildren();
+  findingsList.hidden = true;
+  emptyState.hidden = true;
+  resultsCount.hidden = true;
+  document.getElementById("findingCount").textContent = "0";
+  updateSummary();
 }
 
 function updateSummary() {
@@ -58,9 +77,10 @@ function renderFindings() {
 
   findingsList.innerHTML = visible.map((finding) => {
     const reviewed = finding.status !== "Open";
+    const confidence = ["High", "Medium", "Low"].includes(finding.confidence) ? finding.confidence : "";
     return `<article class="finding-card">
       <div class="finding-card-heading">
-        <div class="finding-badges"><span class="finding-severity ${finding.severity.toLowerCase()}"><i></i>${escapeHtml(finding.severity)}</span><span class="finding-status ${finding.status.toLowerCase()}">${escapeHtml(finding.status)}</span></div>
+        <div class="finding-badges"><span class="finding-severity ${finding.severity.toLowerCase()}"><i></i>${escapeHtml(finding.severity)}</span><span class="finding-status ${finding.status.toLowerCase()}">${escapeHtml(finding.status)}</span>${confidence ? `<span class="finding-confidence" aria-label="Evidence confidence">${escapeHtml(confidence)} evidence confidence</span>` : ""}</div>
         <span class="finding-id">${escapeHtml(finding.id)}</span>
       </div>
       <h3 class="finding-title">${escapeHtml(finding.title)}</h3>
@@ -135,17 +155,24 @@ async function checkBackendHealth() {
     backendStatus.textContent = "Backend online";
     backendStatus.classList.remove("offline");
     backendStatus.classList.add("online");
-    useBharatCodeCheckbox.disabled = !health.ai.configured;
-    if (health.ai.configured) {
-      setWorkflowStatus("Backend ready. BharatCode AI is available as an opt-in; rule-based analysis works without it.");
+    useAIProviderCheckbox.disabled = !health.ai.configured;
+    const provider = health.ai.provider || "AI provider";
+    useAIProviderCheckbox.nextElementSibling.textContent = `Use ${provider} (optional)`;
+    if (health.ai.configurationError) {
+      setWorkflowStatus(`${provider} configuration issue: ${health.ai.configurationError} Rule-based analysis will be used.`);
+    } else if (health.ai.configured) {
+      setWorkflowStatus(`Backend ready. ${provider} credentials are configured; provider connectivity is confirmed only when an AI request succeeds. Rule-based analysis remains available.`);
     } else {
-      setWorkflowStatus("Backend ready. BharatCode AI is not configured; rule-based analysis will be used.");
+      const missing = Array.isArray(health.ai.missingSettings) && health.ai.missingSettings.length
+        ? ` Missing settings: ${health.ai.missingSettings.join(", ")}.`
+        : "";
+      setWorkflowStatus(`Backend ready. ${provider} is not configured; rule-based analysis will be used.${missing}`);
     }
   } catch (error) {
     backendStatus.textContent = "Backend offline";
     backendStatus.classList.remove("online");
     backendStatus.classList.add("offline");
-    useBharatCodeCheckbox.disabled = true;
+    useAIProviderCheckbox.disabled = true;
     setWorkflowStatus(`${error.message} Sample findings remain visible.`, "error");
   }
 }
@@ -215,49 +242,77 @@ function normalizeBackendFindings(items) {
   });
 }
 
-analyzePullRequestButton.addEventListener("click", async () => {
-  if (!validatedRepository || !pullRequestSelect.value) {
-    setWorkflowStatus("Validate a repository and select a pull request first.", "error");
-    return;
-  }
+function getSelectedAnalysisRequest() {
+  if (!validatedRepository || !pullRequestSelect.value) return null;
+  return {
+    owner: validatedRepository.owner,
+    repo: validatedRepository.name,
+    pullNumber: Number(pullRequestSelect.value),
+    useAi: useAIProviderCheckbox.checked
+  };
+}
 
-  const pullNumber = Number(pullRequestSelect.value);
+async function analyzePullRequest(request) {
+  clearDisplayedResults();
+  liveAnalysis = true;
+  loadingState.querySelector("strong").textContent = "Fetching changed files and documentation...";
+  loadingState.hidden = false;
+  errorState.hidden = true;
+  setAnalysisDataState("ANALYSIS IN PROGRESS", "Live analysis in progress", "LIVE ANALYSIS IN PROGRESS");
+  setWorkflowStatus("Fetching changed files and documentation for evidence-based analysis.");
   analyzePullRequestButton.disabled = true;
   analyzePullRequestButton.textContent = "Analyzing…";
-  setWorkflowStatus("Fetching changed files and documentation for evidence-based analysis.");
 
   try {
-    const path = `/repositories/${encodeURIComponent(validatedRepository.owner)}/${encodeURIComponent(validatedRepository.name)}/pulls/${pullNumber}/analyze`;
+    const path = `/repositories/${encodeURIComponent(request.owner)}/${encodeURIComponent(request.repo)}/pulls/${request.pullNumber}/analyze`;
     const started = await apiRequest(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ useAi: useBharatCodeCheckbox.checked })
+      body: JSON.stringify({ useAi: request.useAi })
     });
     if (!started.analysisId) throw new Error("The backend did not return an analysis ID.");
     const result = await apiRequest(`/analysis/${encodeURIComponent(started.analysisId)}`);
-    const updatedFindings = normalizeBackendFindings(result.findings);
+    findings = normalizeBackendFindings(result.findings);
 
-    findings = updatedFindings;
     liveAnalysis = true;
     searchInput.value = "";
     severityFilter.value = "all";
     statusFilter.value = "all";
-    document.getElementById("analysisDataPill").lastChild.textContent = " LIVE ANALYSIS";
-    document.getElementById("analysisDataLabel").lastChild.textContent = "Evidence-backed results";
-    document.getElementById("analysisFooterStatus").textContent = "LIVE REPOSITORY ANALYSIS";
     loaded = true;
+    loadingState.hidden = true;
+    errorState.hidden = true;
+    setAnalysisDataState("LIVE ANALYSIS", "Evidence-backed results", "LIVE REPOSITORY ANALYSIS");
     renderFindings();
 
     const warnings = Array.isArray(result.warnings) ? result.warnings : [];
     const provider = result.provider || "rules";
-    const summary = `Analysis complete for ${result.repository}#${pullNumber}: ${findings.length} verified finding(s) using ${provider}.`;
-    setWorkflowStatus([summary, ...warnings].join(" "), "success");
+    const summary = `Analysis complete for ${result.repository}#${request.pullNumber}: ${findings.length} verified finding(s) using ${provider}.`;
+    const aiStatus = result.ai?.used
+      ? `${result.ai.provider || "AI provider"} analysis was used; returned findings passed evidence verification.`
+      : request.useAi
+        ? "AI was not used; this result came from rule-based fallback."
+        : "AI was not requested; this result is rule-based.";
+    setWorkflowStatus([summary, aiStatus, ...warnings].join(" "), "success");
   } catch (error) {
-    setWorkflowStatus(`Analysis failed: ${error.message} Existing findings were kept.`, "error");
+    clearDisplayedResults();
+    loadingState.hidden = true;
+    analysisErrorMessage.textContent = error.message || "The selected pull request could not be analyzed.";
+    errorState.hidden = false;
+    setAnalysisDataState("ANALYSIS FAILED", "No current analysis results", "LIVE ANALYSIS FAILED");
+    setWorkflowStatus(`Analysis failed: ${analysisErrorMessage.textContent}`, "error");
   } finally {
     analyzePullRequestButton.disabled = !pullRequestSelect.value;
     analyzePullRequestButton.textContent = "Analyze pull request";
   }
+}
+
+analyzePullRequestButton.addEventListener("click", async () => {
+  const request = getSelectedAnalysisRequest();
+  if (!request) {
+    setWorkflowStatus("Validate a repository and select a pull request first.", "error");
+    return;
+  }
+  await analyzePullRequest(request);
 });
 
 function showToast(message) {
@@ -288,27 +343,6 @@ async function copySuggestion(finding) {
   }
 }
 
-function loadAnalysis() {
-  loaded = false;
-  loadingState.hidden = false;
-  errorState.hidden = true;
-  findingsList.hidden = true;
-  emptyState.hidden = true;
-  resultsCount.hidden = true;
-  window.setTimeout(() => {
-    if (new URLSearchParams(window.location.search).get("analysisError") === "1") {
-      loadingState.hidden = true;
-      errorState.hidden = false;
-      loaded = false;
-      return;
-    }
-    loaded = true;
-    loadingState.hidden = true;
-    errorState.hidden = true;
-    renderFindings();
-  }, 450);
-}
-
 searchInput.addEventListener("input", renderFindings);
 severityFilter.addEventListener("change", renderFindings);
 statusFilter.addEventListener("change", renderFindings);
@@ -319,12 +353,13 @@ document.getElementById("clearFilters").addEventListener("click", () => {
   renderFindings();
   searchInput.focus();
 });
-document.getElementById("retryAnalysis").addEventListener("click", () => {
-  const url = new URL(window.location.href);
-  url.searchParams.delete("analysisError");
-  window.history.replaceState({}, "", url);
-  loadAnalysis();
-  checkBackendHealth();
+retryAnalysisButton.addEventListener("click", async () => {
+  const request = getSelectedAnalysisRequest();
+  if (!request) {
+    setWorkflowStatus("Validate a repository and select a pull request before retrying.", "error");
+    return;
+  }
+  await analyzePullRequest(request);
 });
 findingsList.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
@@ -362,5 +397,6 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-loadAnalysis();
+loaded = true;
+renderFindings();
 checkBackendHealth();

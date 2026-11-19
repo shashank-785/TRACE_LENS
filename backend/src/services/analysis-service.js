@@ -9,9 +9,9 @@ const RESULT_LIFETIME_MS = 30 * 60 * 1000;
 const VALID_SEVERITIES = new Set(["High", "Medium", "Low"]);
 
 class AnalysisService {
-  constructor({ githubService, bharatCodeService }) {
+  constructor({ githubService, aiService }) {
     this.githubService = githubService;
-    this.bharatCodeService = bharatCodeService;
+    this.aiService = aiService;
     this.results = new Map();
   }
 
@@ -38,11 +38,13 @@ class AnalysisService {
       warnings.push("The pull request has more changed files than the analysis limit; only the first 300 were examined.");
     }
 
-    if (useAi && !this.bharatCodeService.configured) {
-      warnings.push("BharatCode AI is not configured; evidence-based rule analysis was used.");
+    if (useAi && !this.aiService.configured) {
+      const missing = this.aiService.missingSettings || [];
+      const setupHint = missing.length ? ` Missing settings: ${missing.join(", ")}.` : "";
+      warnings.push(`${this.aiService.providerName || "AI provider"} is not fully configured; evidence-based rule analysis was used.${setupHint}`);
     } else if (useAi) {
       try {
-        const aiCandidates = await this.bharatCodeService.analyze({
+        const aiCandidates = await this.aiService.analyze({
           pullRequest,
           changedFiles,
           documents
@@ -60,7 +62,7 @@ class AnalysisService {
         }
         aiUsed = true;
       } catch (error) {
-        console.warn(`[analysis] BharatCode fallback (${error.code || error.name || "unknown error"}).`);
+        console.warn(`[analysis] AI provider fallback (${error.code || error.name || "unknown error"}).`);
         warnings.push(`${error.message} Evidence-based rule analysis was used instead.`);
       }
     }
@@ -70,9 +72,10 @@ class AnalysisService {
       repository: `${owner}/${repo}`,
       pullRequest,
       createdAt: new Date().toISOString(),
-      provider: aiUsed ? "BharatCode + rules" : "rules",
+      provider: aiUsed ? `${this.aiService.providerName || "AI provider"} + rules` : "rules",
       ai: {
-        configured: this.bharatCodeService.configured,
+        provider: this.aiService.providerName || "OpenAI-compatible provider",
+        configured: this.aiService.configured,
         requested: Boolean(useAi),
         used: aiUsed
       },
@@ -132,6 +135,7 @@ function verifyAiFinding(candidate, index, changedFiles, documents) {
     id: `AI-${String(index + 1).padStart(3, "0")}`,
     title,
     severity,
+    confidence: "Medium",
     status: "Open",
     codeFile: codeFile.filename,
     codeReference: codeFile.filename,
@@ -143,7 +147,7 @@ function verifyAiFinding(candidate, index, changedFiles, documents) {
     context,
     codeEvidence,
     docsEvidence,
-    source: "bharatcode"
+    source: "ai"
   };
 }
 
