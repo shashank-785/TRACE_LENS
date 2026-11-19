@@ -401,7 +401,7 @@ document.getElementById("scanButton").addEventListener("click", (event) => {
     button.querySelector("span").textContent = "Try a sample scan";
     document.getElementById("lastScanTime").textContent = "Just now";
     document.getElementById("activityScanTime").textContent = "just now";
-    showToast("Sample scan complete · 7 findings to review");
+    showToast("Sample scan complete · 7 example findings to review");
   }, 1450);
 });
 
