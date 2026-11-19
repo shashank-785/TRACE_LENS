@@ -1,13 +1,6 @@
 "use strict";
 
-let findings = [
-  { id: "TL-104", severity: "High", status: "Open", title: "Refresh token lifetime no longer matches the guide", codeFile: "src/auth/session.ts", codeReference: "src/auth/session.ts:42", docsFile: "docs/authentication.md", docsReference: "Authentication > Refresh tokens", outdated: "Refresh tokens remain valid for 30 days.", codeValue: "expiresIn: '7d'", suggestion: "Refresh tokens remain valid for 7 days.", context: "The authentication change shortens refresh token lifetime from 30 to 7 days." },
-  { id: "TL-103", severity: "High", status: "Open", title: "Default request timeout was reduced", codeFile: "src/config/http.ts", codeReference: "src/config/http.ts:18", docsFile: "README.md", docsReference: "Configuration > Network", outdated: "Requests time out after 60 seconds by default.", codeValue: "requestTimeoutMs: 30_000", suggestion: "Requests time out after 30 seconds by default.", context: "The default HTTP client timeout changed from 60 seconds to 30 seconds." },
-  { id: "TL-102", severity: "Medium", status: "Reviewed", title: "CSV is no longer the only export format", codeFile: "src/reports/export.ts", codeReference: "src/reports/export.ts:67", docsFile: "docs/reports.md", docsReference: "Exporting reports", outdated: "Reports can only be downloaded as CSV.", codeValue: "formats: ['csv', 'json']", suggestion: "Reports can be downloaded as CSV or JSON.", context: "The export handler now supports JSON in addition to CSV." },
-  { id: "TL-101", severity: "Medium", status: "Open", title: "Minimum Node.js version has changed", codeFile: "package.json", codeReference: "package.json:engines.node", docsFile: "CONTRIBUTING.md", docsReference: "Development setup > Prerequisites", outdated: "Install Node.js 18 or newer before contributing.", codeValue: "\"node\": \">=20\"", suggestion: "Install Node.js 20 or newer before contributing.", context: "The project now depends on runtime features available in Node.js 20." },
-  { id: "TL-100", severity: "Low", status: "Resolved", title: "Retry attempts are limited to two", codeFile: "src/client/retry.ts", codeReference: "src/client/retry.ts:25", docsFile: "docs/api-client.md", docsReference: "Client options > Retries", outdated: "The client retries failed requests up to five times.", codeValue: "maxRetries = 2", suggestion: "The client retries failed requests up to two times.", context: "The retry policy was reduced to limit repeated requests." },
-  { id: "TL-099", severity: "Low", status: "Open", title: "Health endpoint now returns a version field", codeFile: "src/routes/health.ts", codeReference: "src/routes/health.ts:12", docsFile: "docs/operations.md", docsReference: "Health checks > Response", outdated: "The health endpoint returns only a status field.", codeValue: "{ status: 'ok', version: appVersion }", suggestion: "The health endpoint returns status and version fields.", context: "The health response now includes the deployed application version." }
-];
+let findings = [];
 
 const findingsList = document.getElementById("findingsList");
 const searchInput = document.getElementById("findingSearch");
@@ -33,6 +26,7 @@ let toastTimer;
 let loaded = false;
 let liveAnalysis = false;
 let validatedRepository = null;
+let analysisRequestSequence = 0;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
@@ -47,6 +41,7 @@ function setAnalysisDataState(pillText, labelText, footerText) {
 }
 
 function clearDisplayedResults() {
+  liveAnalysis = false;
   findings = [];
   loaded = false;
   findingsList.replaceChildren();
@@ -58,6 +53,13 @@ function clearDisplayedResults() {
 }
 
 function updateSummary() {
+  if (!liveAnalysis) {
+    document.getElementById("totalFindings").textContent = "—";
+    document.getElementById("priorityFindings").textContent = "—";
+    document.getElementById("affectedFiles").textContent = "—";
+    document.getElementById("needsReview").textContent = "—";
+    return;
+  }
   document.getElementById("totalFindings").textContent = findings.length;
   document.getElementById("priorityFindings").textContent = findings.filter((finding) => finding.severity === "High").length;
   const affectedFiles = new Set(findings.flatMap((finding) => [finding.codeFile, finding.docsFile]));
@@ -98,13 +100,18 @@ function renderFindings() {
   findingsList.hidden = visible.length === 0;
   emptyState.hidden = visible.length !== 0;
   const noFindings = liveAnalysis && findings.length === 0;
+  const noAnalysis = !liveAnalysis && findings.length === 0;
   document.getElementById("emptyStateTitle").textContent = noFindings
     ? "No evidence-backed mismatches found"
-    : "No findings match your filters";
+    : noAnalysis
+      ? "No live analysis yet"
+      : "No findings match your filters";
   document.getElementById("emptyStateDescription").textContent = noFindings
     ? "The analyzed pull request contained no documentation mismatches that could be verified."
-    : "Try a different search, severity, or status.";
-  document.getElementById("clearFilters").hidden = noFindings;
+    : noAnalysis
+      ? "Connect a public repository and analyze an open pull request. Sample findings are not shown here."
+      : "Try a different search, severity, or status.";
+  document.getElementById("clearFilters").hidden = noFindings || noAnalysis;
   updateSummary();
 }
 
@@ -168,19 +175,27 @@ async function checkBackendHealth() {
         : "";
       setWorkflowStatus(`Backend ready. ${provider} is not configured; rule-based analysis will be used.${missing}`);
     }
+    return true;
   } catch (error) {
     backendStatus.textContent = "Backend offline";
     backendStatus.classList.remove("online");
     backendStatus.classList.add("offline");
     useAIProviderCheckbox.disabled = true;
-    setWorkflowStatus(`${error.message} Sample findings remain visible.`, "error");
+    setWorkflowStatus(`${error.message} No analysis results are available until the backend responds.`, "error");
+    return false;
   }
 }
 
 repositoryForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const requestSequence = ++analysisRequestSequence;
+  clearDisplayedResults();
+  loadingState.hidden = true;
+  errorState.hidden = true;
   validatedRepository = null;
   setPullRequestOptions([]);
+  setAnalysisDataState("LIVE MODE", "No live analysis result", "LIVE MODE · READY");
+  document.getElementById("resultsRepositoryName").textContent = "No repository selected";
   validateRepositoryButton.disabled = true;
   validateRepositoryButton.textContent = "Validating…";
   setWorkflowStatus("Validating the repository and loading open pull requests.");
@@ -191,10 +206,12 @@ repositoryForm.addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ repositoryUrl: repositoryInput.value.trim() })
     });
+    if (requestSequence !== analysisRequestSequence) return;
     const repository = validation.repository;
     const pullRequestData = await apiRequest(
       `/repositories/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/pulls`
     );
+    if (requestSequence !== analysisRequestSequence) return;
     validatedRepository = repository;
     setPullRequestOptions(pullRequestData.pullRequests);
     if (pullRequestData.pullRequests.length) {
@@ -203,22 +220,43 @@ repositoryForm.addEventListener("submit", async (event) => {
       setWorkflowStatus(`Validated ${repository.fullName}, but it has no open pull requests.`);
     }
   } catch (error) {
-    setWorkflowStatus(`Repository validation failed: ${error.message}`, "error");
+    if (requestSequence === analysisRequestSequence) {
+      setWorkflowStatus(`Repository validation failed: ${error.message}`, "error");
+    }
   } finally {
-    validateRepositoryButton.disabled = false;
-    validateRepositoryButton.textContent = "Validate repository";
+    if (requestSequence === analysisRequestSequence) {
+      validateRepositoryButton.disabled = false;
+      validateRepositoryButton.textContent = "Validate repository";
+    }
   }
 });
 
 repositoryInput.addEventListener("input", () => {
-  if (!validatedRepository) return;
+  analysisRequestSequence += 1;
+  clearDisplayedResults();
+  loadingState.hidden = true;
+  errorState.hidden = true;
+  validateRepositoryButton.disabled = false;
+  validateRepositoryButton.textContent = "Validate repository";
   validatedRepository = null;
   setPullRequestOptions([]);
+  setAnalysisDataState("LIVE MODE", "No live analysis result", "LIVE MODE · READY");
+  document.getElementById("resultsRepositoryName").textContent = "No repository selected";
   setWorkflowStatus("Validate the updated repository URL before selecting a pull request.");
 });
 
 pullRequestSelect.addEventListener("change", () => {
+  analysisRequestSequence += 1;
+  clearDisplayedResults();
+  loadingState.hidden = true;
+  errorState.hidden = true;
+  setAnalysisDataState("LIVE MODE", "Pull request not analyzed", "LIVE MODE · READY");
   analyzePullRequestButton.disabled = !validatedRepository || !pullRequestSelect.value;
+  if (pullRequestSelect.value) {
+    setWorkflowStatus(`Pull request #${pullRequestSelect.value} selected. Run analysis to load current results.`);
+  } else {
+    setWorkflowStatus("Choose an open pull request to analyze.");
+  }
 });
 
 function normalizeBackendFindings(items) {
@@ -253,8 +291,8 @@ function getSelectedAnalysisRequest() {
 }
 
 async function analyzePullRequest(request) {
+  const requestSequence = ++analysisRequestSequence;
   clearDisplayedResults();
-  liveAnalysis = true;
   loadingState.querySelector("strong").textContent = "Fetching changed files and documentation...";
   loadingState.hidden = false;
   errorState.hidden = true;
@@ -272,28 +310,10 @@ async function analyzePullRequest(request) {
     });
     if (!started.analysisId) throw new Error("The backend did not return an analysis ID.");
     const result = await apiRequest(`/analysis/${encodeURIComponent(started.analysisId)}`);
-    findings = normalizeBackendFindings(result.findings);
-
-    liveAnalysis = true;
-    searchInput.value = "";
-    severityFilter.value = "all";
-    statusFilter.value = "all";
-    loaded = true;
-    loadingState.hidden = true;
-    errorState.hidden = true;
-    setAnalysisDataState("LIVE ANALYSIS", "Evidence-backed results", "LIVE REPOSITORY ANALYSIS");
-    renderFindings();
-
-    const warnings = Array.isArray(result.warnings) ? result.warnings : [];
-    const provider = result.provider || "rules";
-    const summary = `Analysis complete for ${result.repository}#${request.pullNumber}: ${findings.length} verified finding(s) using ${provider}.`;
-    const aiStatus = result.ai?.used
-      ? `${result.ai.provider || "AI provider"} analysis was used; returned findings passed evidence verification.`
-      : request.useAi
-        ? "AI was not used; this result came from rule-based fallback."
-        : "AI was not requested; this result is rule-based.";
-    setWorkflowStatus([summary, aiStatus, ...warnings].join(" "), "success");
+    if (requestSequence !== analysisRequestSequence) return;
+    displayAnalysisResult(result, request);
   } catch (error) {
+    if (requestSequence !== analysisRequestSequence) return;
     clearDisplayedResults();
     loadingState.hidden = true;
     analysisErrorMessage.textContent = error.message || "The selected pull request could not be analyzed.";
@@ -301,9 +321,35 @@ async function analyzePullRequest(request) {
     setAnalysisDataState("ANALYSIS FAILED", "No current analysis results", "LIVE ANALYSIS FAILED");
     setWorkflowStatus(`Analysis failed: ${analysisErrorMessage.textContent}`, "error");
   } finally {
-    analyzePullRequestButton.disabled = !pullRequestSelect.value;
-    analyzePullRequestButton.textContent = "Analyze pull request";
+    if (requestSequence === analysisRequestSequence) {
+      analyzePullRequestButton.disabled = !pullRequestSelect.value;
+      analyzePullRequestButton.textContent = "Analyze pull request";
+    }
   }
+}
+
+function displayAnalysisResult(result, request) {
+  findings = normalizeBackendFindings(result.findings);
+  liveAnalysis = true;
+  searchInput.value = "";
+  severityFilter.value = "all";
+  statusFilter.value = "all";
+  loaded = true;
+  loadingState.hidden = true;
+  errorState.hidden = true;
+  document.getElementById("resultsRepositoryName").textContent = result.repository;
+  setAnalysisDataState("LIVE ANALYSIS", "Evidence-backed results", "LIVE REPOSITORY ANALYSIS");
+  renderFindings();
+
+  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  const provider = result.provider || "rules";
+  const summary = `Analysis complete for ${result.repository}#${request.pullNumber}: ${findings.length} verified finding(s) using ${provider}.`;
+  const aiStatus = result.ai?.used
+    ? `${result.ai.provider || "AI provider"} analysis was used; returned findings passed evidence verification.`
+    : request.useAi
+      ? "AI was not used; this result came from rule-based fallback."
+      : "AI was not requested; this result is rule-based.";
+  setWorkflowStatus([summary, aiStatus, ...warnings].join(" "), "success");
 }
 
 analyzePullRequestButton.addEventListener("click", async () => {
@@ -397,6 +443,63 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-loaded = true;
-renderFindings();
-checkBackendHealth();
+async function loadSharedAnalysis() {
+  const parameters = new URLSearchParams(window.location.search);
+  const analysisId = parameters.get("analysisId");
+  if (!analysisId) return false;
+
+  const owner = parameters.get("owner") || "";
+  const repo = parameters.get("repo") || "";
+  const pullNumber = Number(parameters.get("pull"));
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo) ||
+      !Number.isSafeInteger(pullNumber) || pullNumber < 1) {
+    throw new Error("The shared analysis link is invalid. Validate the repository and select the pull request again.");
+  }
+
+  const requestSequence = ++analysisRequestSequence;
+  validatedRepository = { owner, name: repo, fullName: `${owner}/${repo}` };
+  repositoryInput.value = `https://github.com/${owner}/${repo}`;
+  setPullRequestOptions([{ number: pullNumber, title: `Pull request #${pullNumber}` }]);
+  pullRequestSelect.value = String(pullNumber);
+  analyzePullRequestButton.disabled = false;
+  let result;
+  try {
+    result = await apiRequest(`/analysis/${encodeURIComponent(analysisId)}`);
+  } catch (error) {
+    if (requestSequence !== analysisRequestSequence) return true;
+    throw error;
+  }
+  if (requestSequence !== analysisRequestSequence) return true;
+  const fullName = `${owner}/${repo}`;
+  if (result.repository !== fullName || result.pullRequest?.number !== pullNumber) {
+    throw new Error("The saved analysis does not match the repository and pull request in this link.");
+  }
+
+  setPullRequestOptions([{ number: pullNumber, title: result.pullRequest.title }]);
+  pullRequestSelect.value = String(pullNumber);
+  analyzePullRequestButton.disabled = false;
+  displayAnalysisResult(result, { owner, repo, pullNumber, useAi: Boolean(result.ai?.requested) });
+  return true;
+}
+
+async function initializeResultsPage() {
+  const backendReady = await checkBackendHealth();
+  try {
+    const sharedResultLoaded = await loadSharedAnalysis();
+    if (!sharedResultLoaded && backendReady) {
+      loaded = true;
+      renderFindings();
+      setWorkflowStatus("Connect a public repository and analyze an open pull request. No sample findings are shown in this live workflow.");
+    }
+  } catch (error) {
+    clearDisplayedResults();
+    loadingState.hidden = true;
+    analysisErrorMessage.textContent = error.message;
+    errorState.hidden = false;
+    setAnalysisDataState("ANALYSIS UNAVAILABLE", "No current analysis result", "LIVE ANALYSIS · UNAVAILABLE");
+    setWorkflowStatus(`Could not load the saved analysis: ${error.message}`, "error");
+  }
+}
+
+setAnalysisDataState("LIVE MODE", "No live analysis result", "LIVE MODE · READY");
+initializeResultsPage();

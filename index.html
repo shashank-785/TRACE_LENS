@@ -45,10 +45,10 @@
       <span class="brand-name">TRACE<span>LENS</span></span>
     </a>
     <span class="topbar-divider"></span>
-    <div class="repo-picker-wrap">
+    <div class="repo-picker-wrap" id="repoPickerWrap" hidden>
       <button class="repo-picker" id="repoPicker" aria-expanded="false" aria-haspopup="listbox">
         <span class="repo-mini-icon">⌘</span>
-        <span id="currentRepo">trace-lens/<strong>demo-project</strong></span>
+        <span id="currentRepo">Demo repository</span>
         <svg class="icon tiny"><use href="#i-chevron"/></svg>
       </button>
       <div class="repo-menu" id="repoMenu" role="listbox" aria-label="Choose a demo repository" hidden>
@@ -62,24 +62,109 @@
     <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="mainNav"><svg class="icon"><use href="#i-menu"/></svg></button>
     <nav class="main-nav" id="mainNav" aria-label="Main navigation">
       <a class="nav-link active" href="#overview" aria-current="page"><svg class="icon"><use href="#i-grid"/></svg>Dashboard</a>
-      <a class="nav-link" href="#pull-requests"><svg class="icon"><use href="#i-git-pull"/></svg>Pull requests</a>
-      <a class="nav-link" href="#drift-details"><svg class="icon"><use href="#i-book"/></svg>Documentation</a>
+      <a class="nav-link" href="#livePullRequests"><svg class="icon"><use href="#i-git-pull"/></svg>Pull requests</a>
+      <a class="nav-link" href="#liveDocumentation"><svg class="icon"><use href="#i-book"/></svg>Documentation</a>
       <a class="nav-link" href="document-upload.html"><svg class="icon"><use href="#i-upload"/></svg>Document Upload</a>
       <a class="nav-link" href="analysis-results.html" aria-label="Analysis Results"><svg class="icon"><use href="#i-alert"/></svg>Analysis Results</a>
-      <a class="nav-link" href="#history"><svg class="icon"><use href="#i-history"/></svg>History</a>
+      <a class="nav-link" href="#demoPreview"><svg class="icon"><use href="#i-history"/></svg>Demo preview</a>
     </nav>
     <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" aria-pressed="false" title="Switch to light mode">
       <span class="theme-toggle-icon" data-theme-icon aria-hidden="true">☼</span><span class="theme-toggle-label" data-theme-label>Light mode</span>
     </button>
     <div class="topbar-right">
-      <div class="connection"><span class="connection-dot"></span><span>GitHub <b>demo</b></span></div>
+      <div class="connection"><span class="connection-dot"></span><span>GitHub <b id="headerGitHubStatus">not connected</b></span></div>
       <span class="topbar-divider slim"></span>
-      <div class="last-scan"><span>LAST SCAN</span><strong id="lastScanTime">Today, 10:42 AM</strong></div>
-      <button class="avatar" aria-label="Demo profile">TL</button>
+      <div class="last-scan"><span>LAST ANALYSIS</span><strong id="lastScanTime">No analysis yet</strong></div>
+      <button class="avatar" aria-label="TRACE LENS">TL</button>
     </div>
   </header>
 
-  <main class="app-shell" id="overview">
+  <main class="app-shell live-shell" id="overview">
+    <div class="page-heading">
+      <div>
+        <div class="breadcrumb"><span>WORKSPACE</span><svg class="icon tiny"><use href="#i-chevron-right"/></svg><span>LIVE REPOSITORY ANALYSIS</span></div>
+        <div class="heading-row">
+          <div>
+            <h1>Review documentation drift in a real pull request.</h1>
+            <p class="page-subtitle">Connect a public GitHub repository to compare changed code with its documentation.</p>
+          </div>
+          <span class="live-pill"><span></span> LIVE MODE</span>
+        </div>
+      </div>
+      <div class="heading-actions">
+        <span class="scan-label"><span class="scan-pulse"></span><span id="liveBackendStatus">Checking backend…</span></span>
+        <button class="button button-secondary" id="showDemoMode" type="button">Open demo preview</button>
+      </div>
+    </div>
+
+    <section class="panel live-connect-panel" aria-labelledby="liveRepositoryHeading">
+      <div class="panel-header">
+        <div class="panel-title-block">
+          <div class="panel-heading-line"><h2 id="liveRepositoryHeading">Connect a public GitHub repository</h2></div>
+          <p>Private repositories are not supported. Repository data and pull requests are retrieved from the GitHub API.</p>
+        </div>
+        <span class="backend-status" id="liveAiStatus" role="status">Checking AI configuration…</span>
+      </div>
+      <form class="live-repository-form" id="liveRepositoryForm">
+        <label for="liveRepositoryUrl">GitHub repository URL
+          <input id="liveRepositoryUrl" name="repositoryUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://github.com/owner/repository" required>
+        </label>
+        <button class="button button-primary" id="liveConnectButton" type="submit">Validate repository</button>
+      </form>
+      <p class="live-workflow-status" id="liveWorkflowStatus" role="status" aria-live="polite">Enter a public repository URL to begin. No sample statistics or findings are shown in live mode.</p>
+      <button class="text-button live-retry" id="liveRetryButton" type="button" hidden>Retry repository request</button>
+    </section>
+
+    <section class="live-stat-grid" aria-label="Selected repository data">
+      <article class="panel live-stat-card"><span>OPEN PULL REQUESTS</span><strong id="liveOpenPullRequestCount">—</strong><small>Live GitHub API response</small></article>
+      <article class="panel live-stat-card"><span>CHANGED FILES</span><strong id="liveChangedFileCount">—</strong><small id="liveChangedFileNote">Select an open pull request</small></article>
+      <article class="panel live-stat-card"><span>VERIFIED FINDINGS</span><strong id="liveFindingCount">—</strong><small id="liveFindingNote">Run an analysis to see results</small></article>
+    </section>
+
+    <div class="live-content-grid">
+      <section class="panel live-pr-panel" id="livePullRequests" aria-labelledby="livePullRequestsHeading">
+        <div class="panel-header">
+          <div class="panel-title-block"><div class="panel-heading-line"><h2 id="livePullRequestsHeading">Open pull requests</h2><span class="count-pill" id="livePullRequestCount">—</span></div><p id="liveRepositoryName">No repository selected</p></div>
+        </div>
+        <div class="live-table-scroll">
+          <table class="live-pr-table">
+            <thead><tr><th>Pull request</th><th>Author</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="livePullRequestRows"></tbody>
+          </table>
+          <div class="live-empty-state" id="livePullRequestEmpty">Validate a public repository to load its real open pull requests.</div>
+        </div>
+      </section>
+
+      <section class="panel live-selection-panel" id="liveDocumentation" aria-labelledby="liveSelectionHeading">
+        <div class="panel-header">
+          <div class="panel-title-block"><div class="panel-heading-line"><h2 id="liveSelectionHeading">Selected pull request</h2></div><p id="liveSelectionStatus">Choose a pull request to retrieve its changed files and related documentation.</p></div>
+        </div>
+        <div class="live-selection-details">
+          <a id="livePullRequestLink" class="live-pr-title" href="#" target="_blank" rel="noopener noreferrer" hidden></a>
+          <div class="live-detail-stats"><span>Changed files<strong id="liveSelectedFileCount">—</strong></span><span>Relevant documents<strong id="liveDocumentCount">—</strong></span></div>
+          <p class="live-doc-list" id="liveDocumentList">Documentation paths will appear after a pull request is selected.</p>
+          <button class="button button-primary" id="liveAnalyzeButton" type="button" disabled>Analyze selected pull request</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel live-result-panel" id="liveAnalysisResult" aria-labelledby="liveResultHeading" hidden>
+      <div class="panel-header">
+        <div class="panel-title-block"><div class="panel-heading-line"><h2 id="liveResultHeading">Analysis result</h2></div><p id="liveResultSummary"></p></div>
+        <a class="button button-secondary" id="liveViewResults" href="analysis-results.html" hidden>View evidence and findings</a>
+      </div>
+      <p class="live-result-message" id="liveResultMessage" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="panel live-demo-panel" id="demoPreview">
+      <div><span class="live-demo-kicker">DEMO PREVIEW</span><h2>Want to see the sample dashboard?</h2><p>Demo data is illustrative and is never presented as live repository analysis.</p></div>
+      <button class="button button-secondary" type="button" id="showDemoModeFooter">Open demo preview</button>
+    </section>
+
+    <footer class="page-footer"><span><span class="footer-mark">◈</span> TRACE LENS <span class="footer-separator">/</span> <span>Documentation that stays in sync.</span></span><span>LIVE MODE · Results come from the backend API</span></footer>
+  </main>
+
+  <main class="app-shell" id="demoDashboard" hidden>
     <div class="page-heading">
       <div>
         <div class="breadcrumb"><span>WORKSPACE</span><svg class="icon tiny"><use href="#i-chevron-right"/></svg><span>CODE &amp; DOCS REVIEW</span></div>
@@ -93,6 +178,7 @@
       </div>
       <div class="heading-actions">
         <span class="scan-label"><span class="scan-pulse"></span>Demo environment</span>
+        <button class="button button-secondary" id="showLiveMode" type="button">Back to live mode</button>
         <button class="button button-primary" id="scanButton"><svg class="icon"><use href="#i-scan"/></svg><span>Try a sample scan</span></button>
       </div>
     </div>
@@ -133,39 +219,14 @@
         <section class="panel upload-panel" id="document-upload" aria-labelledby="documentUploadTitle">
           <div class="panel-header upload-header">
             <div class="panel-title-block">
-              <div class="panel-heading-line"><span class="upload-heading-icon"><svg class="icon"><use href="#i-upload"/></svg></span><h2 id="documentUploadTitle">Upload a document</h2></div>
-              <p>Add documentation to your workspace for analysis.</p>
+              <div class="panel-heading-line"><span class="upload-heading-icon"><svg class="icon"><use href="#i-upload"/></svg></span><h2 id="documentUploadTitle">Document upload is unavailable</h2></div>
+              <p>Local files are not uploaded or included in analysis.</p>
             </div>
-            <span class="upload-demo-tag">DEMO MODE</span>
+            <span class="upload-demo-tag">UNAVAILABLE</span>
           </div>
-          <div class="upload-content">
-            <button class="upload-dropzone" id="uploadDropzone" type="button" aria-describedby="uploadRequirements">
-              <span class="dropzone-icon"><svg class="icon"><use href="#i-upload"/></svg></span>
-              <span class="dropzone-title">Drop your document here</span>
-              <span class="dropzone-browse">or <span>browse files</span> from your computer</span>
-              <span class="dropzone-requirements" id="uploadRequirements">PDF, DOC, DOCX, Markdown, or TXT · Up to 20 MB</span>
-            </button>
-            <input id="documentInput" class="sr-only" type="file" accept=".pdf,.doc,.docx,.md,.txt" tabindex="-1" aria-label="Choose a document">
-            <p class="upload-error" id="uploadError" role="alert" hidden></p>
-            <div class="upload-file-card" id="uploadFileCard" hidden>
-              <span class="upload-file-icon" id="uploadFileIcon" aria-hidden="true">DOC</span>
-              <div class="upload-file-info">
-                <strong class="upload-file-name" id="uploadFileName"></strong>
-                <span class="upload-file-meta" id="uploadFileMeta"></span>
-                <div class="upload-progress-track" id="uploadProgressTrack" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Ready to upload">
-                  <span id="uploadProgressFill"></span>
-                </div>
-                <span class="upload-status" id="uploadStatus" role="status" aria-live="polite">Ready to upload</span>
-              </div>
-              <div class="upload-file-actions">
-                <button class="upload-action" id="replaceDocument" type="button">Replace</button>
-                <button class="upload-remove" id="removeDocument" type="button" aria-label="Remove selected document"><svg class="icon tiny"><use href="#i-close"/></svg></button>
-              </div>
-            </div>
-            <div class="upload-footer">
-              <span class="upload-demo-note">Demo mode · Upload progress is simulated; files stay in this browser.</span>
-              <button class="button button-primary upload-submit" id="uploadButton" type="button" disabled><svg class="icon"><use href="#i-upload"/></svg><span>Upload document</span></button>
-            </div>
+          <div class="upload-content live-upload-unavailable">
+            <p>Live analysis retrieves supported documentation from the selected public GitHub repository instead.</p>
+            <a class="button button-secondary" href="document-upload.html">Learn about upload support</a>
           </div>
         </section>
 
@@ -257,5 +318,6 @@
     </section>
   </div>
   <script src="script.js"></script>
+  <script src="live-dashboard.js"></script>
 </body>
 </html>

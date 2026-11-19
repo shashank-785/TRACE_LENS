@@ -36,21 +36,21 @@
       <span class="brand-name">TRACE<span>LENS</span></span>
     </a>
     <span class="topbar-divider"></span>
-    <a class="upload-repo-link" href="index.html#overview"><span class="repo-mini-icon" aria-hidden="true">⌘</span><span>trace-lens/<strong>demo-project</strong></span></a>
+    <a class="upload-repo-link" href="index.html#overview"><span class="repo-mini-icon" aria-hidden="true">⌘</span><span>No repository selected</span></a>
     <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="mainNav"><svg class="icon"><use href="#i-menu"/></svg></button>
     <nav class="main-nav" id="mainNav" aria-label="Main navigation">
       <a class="nav-link" href="index.html#overview"><svg class="icon"><use href="#i-grid"/></svg>Dashboard</a>
-      <a class="nav-link" href="index.html#pull-requests"><svg class="icon"><use href="#i-git-pull"/></svg>Pull requests</a>
-      <a class="nav-link" href="index.html#drift-details"><svg class="icon"><use href="#i-book"/></svg>Documentation</a>
+      <a class="nav-link" href="index.html#livePullRequests"><svg class="icon"><use href="#i-git-pull"/></svg>Pull requests</a>
+      <a class="nav-link" href="index.html#liveDocumentation"><svg class="icon"><use href="#i-book"/></svg>Documentation</a>
       <a class="nav-link active" href="document-upload.html" aria-current="page"><svg class="icon"><use href="#i-upload"/></svg>Document Upload</a>
       <a class="nav-link" href="analysis-results.html"><svg class="icon"><use href="#i-alert"/></svg>Analysis Results</a>
-      <a class="nav-link" href="index.html#history"><svg class="icon"><use href="#i-history"/></svg>History</a>
+      <a class="nav-link" href="index.html#demoPreview"><svg class="icon"><use href="#i-history"/></svg>Demo preview</a>
     </nav>
     <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" aria-pressed="false" title="Switch to light mode">
       <span class="theme-toggle-icon" data-theme-icon aria-hidden="true">☼</span><span class="theme-toggle-label" data-theme-label>Light mode</span>
     </button>
     <div class="topbar-right">
-      <div class="connection"><span class="connection-dot"></span><span>GitHub <b>demo</b></span></div>
+      <div class="connection"><span class="connection-dot"></span><span>GitHub <b>not connected</b></span></div>
     </div>
   </header>
 
@@ -58,73 +58,44 @@
     <div class="upload-page-heading">
       <div>
         <div class="breadcrumb"><a href="index.html#overview">WORKSPACE</a><svg class="icon tiny"><use href="#i-chevron-right"/></svg><span>DOCUMENT UPLOAD</span></div>
-        <span class="upload-eyebrow">ADD TO YOUR WORKSPACE</span>
-        <h1>Upload documentation</h1>
-        <p class="page-subtitle">Choose a document to prepare it for a documentation drift review.</p>
+        <span class="upload-eyebrow">LIVE WORKFLOW</span>
+        <h1>Document upload is unavailable</h1>
+        <p class="page-subtitle">Uploaded files are not accepted by the backend or included in analysis.</p>
       </div>
-      <span class="demo-pill"><span></span> DEMO MODE</span>
+      <span class="demo-pill"><span></span> NOT IMPLEMENTED</span>
     </div>
 
     <div class="upload-layout">
       <section class="panel standalone-upload-panel" aria-labelledby="documentUploadTitle">
         <div class="panel-header upload-header">
           <div class="panel-title-block">
-            <div class="panel-heading-line"><span class="upload-heading-icon"><svg class="icon"><use href="#i-upload"/></svg></span><h2 id="documentUploadTitle">Choose a document</h2></div>
-            <p>Drop a file below or browse your device.</p>
+            <div class="panel-heading-line"><span class="upload-heading-icon"><svg class="icon"><use href="#i-upload"/></svg></span><h2 id="documentUploadTitle">No file is uploaded or stored</h2></div>
+            <p>This page does not select, transmit, or prepare local files.</p>
           </div>
-          <span class="upload-demo-tag">LOCAL DEMO</span>
+          <span class="upload-demo-tag">UNAVAILABLE</span>
         </div>
-        <div class="upload-content">
-          <button class="upload-dropzone" id="uploadDropzone" type="button" aria-describedby="uploadRequirements">
-            <span class="dropzone-icon"><svg class="icon"><use href="#i-upload"/></svg></span>
-            <span class="dropzone-title">Drag and drop your document here</span>
-            <span class="dropzone-browse">or <span>browse files</span> from your computer</span>
-            <span class="dropzone-requirements" id="uploadRequirements">PDF, DOC, DOCX, Markdown, or TXT · Up to 20 MB</span>
-          </button>
-          <input id="documentInput" class="sr-only" type="file" accept=".pdf,.doc,.docx,.md,.txt" tabindex="-1" aria-label="Choose a document">
-          <p class="upload-error" id="uploadError" role="alert" hidden></p>
-          <div class="upload-file-card" id="uploadFileCard" hidden>
-            <span class="upload-file-icon" id="uploadFileIcon" aria-hidden="true"></span>
-            <div class="upload-file-info">
-              <strong class="upload-file-name" id="uploadFileName"></strong>
-              <span class="upload-file-meta" id="uploadFileMeta"></span>
-              <div class="upload-progress-track" id="uploadProgressTrack" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Ready to upload">
-                <span id="uploadProgressFill"></span>
-              </div>
-              <span class="upload-status" id="uploadStatus" role="status" aria-live="polite">Ready to upload</span>
-            </div>
-            <div class="upload-file-actions">
-              <button class="upload-action" id="replaceDocument" type="button">Replace</button>
-              <button class="upload-remove" id="removeDocument" type="button" aria-label="Remove selected document"><svg class="icon tiny"><use href="#i-close"/></svg></button>
-            </div>
-          </div>
-          <div class="upload-footer">
-            <span class="upload-demo-note">Demo only · Nothing is sent to a server.</span>
-            <button class="button button-primary upload-submit" id="uploadButton" type="button" disabled><svg class="icon"><use href="#i-upload"/></svg><span>Prepare document</span></button>
-          </div>
+        <div class="upload-content live-upload-unavailable">
+          <p>TRACE LENS currently retrieves README and supported documentation files from a public GitHub repository. Those repository documents are sent to the analysis engine with the selected pull request diff.</p>
+          <a class="button button-primary" href="index.html#overview">Analyze a public repository</a>
         </div>
       </section>
 
       <aside class="upload-guidance">
         <section class="panel upload-guide-card">
           <span class="upload-guide-icon"><svg class="icon"><use href="#i-file"/></svg></span>
-          <h2>Supported files</h2>
-          <p>Upload one document at a time. The demo accepts these formats:</p>
-          <div class="format-list"><span>PDF</span><span>DOC / DOCX</span><span>Markdown</span><span>TXT</span></div>
-          <div class="upload-limit"><strong>20 MB</strong><span>maximum file size</span></div>
+          <h2>Documentation sources</h2>
+          <p>Live analysis uses documentation retrieved from the selected public GitHub repository.</p>
+          <div class="format-list"><span>README</span><span>Markdown</span><span>Text docs</span></div>
         </section>
         <section class="upload-privacy-note">
           <span class="privacy-check"><svg class="icon"><use href="#i-check"/></svg></span>
-          <div><strong>Private demo</strong><p>File selection and progress are simulated in this browser. No document is uploaded or stored.</p></div>
+          <div><strong>Local files stay local</strong><p>This page does not read or send files from your device.</p></div>
         </section>
-        <a class="upload-results-link" href="analysis-results.html"><span>Have a document ready?</span><strong>Review sample analysis results <svg class="icon tiny"><use href="#i-chevron-right"/></svg></strong></a>
       </aside>
     </div>
 
-    <footer class="page-footer"><span><span class="footer-mark">◈</span> TRACE LENS <span class="footer-separator">/</span> <span>Documentation that stays in sync.</span></span><span>DEMO ENVIRONMENT · No live repository data</span></footer>
+    <footer class="page-footer"><span><span class="footer-mark">◈</span> TRACE LENS <span class="footer-separator">/</span> <span>Documentation that stays in sync.</span></span><span>UPLOAD UNAVAILABLE · No browser-only success is simulated</span></footer>
   </main>
-
-  <div class="toast" id="uploadToast" role="status" aria-live="polite"><span class="toast-check"><svg class="icon tiny"><use href="#i-check"/></svg></span><span id="uploadToastMessage">Document prepared</span></div>
   <script src="document-upload.js"></script>
 </body>
 </html>

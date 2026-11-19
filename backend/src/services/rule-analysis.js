@@ -193,10 +193,9 @@ function lineMentionsKey(line, terms, key) {
 
 function comparableValue(value, key) {
   const cleaned = value.trim().replace(/^['"`]|['"`]$/g, "").replace(/_/g, "");
-  const parsed = readNumber(cleaned, key);
-  if (parsed !== null) return parsed;
   if (/^(true|false)$/i.test(cleaned)) return cleaned.toLowerCase();
-  return null;
+  const scalar = cleaned.match(/^(?:[A-Za-z_$][\w$.]*\s*\?\?\s*)?([+-]?\d+(?:\.\d+)?\s*(?:milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d)?)$/i);
+  return scalar ? readNumber(scalar[1], key) : null;
 }
 
 function extractComparableValues(line, key) {

@@ -52,6 +52,25 @@ test("rule analysis reports only a code value that conflicts with an actual docu
   assert.deepEqual(analyzeWithRules(changedFiles, currentDocs), []);
 });
 
+test("rule analysis ignores object and expression assignments that merely contain numbers", () => {
+  const nonScalarChanges = [
+    {
+      filename: "backend/test/backend.test.js",
+      patch: "@@ -1 +1 @@\n+pullRequest: { number: 2, title: \"Update API\" },"
+    },
+    {
+      filename: "src/timeouts.js",
+      patch: "@@ -1 +1 @@\n+requestTimeoutMs = getTimeout(30000);"
+    }
+  ];
+  const docs = [{
+    path: "README.md",
+    content: "Pull request analysis is limited to five requests per minute.\nThe request timeout is 60 seconds by default."
+  }];
+
+  assert.deepEqual(analyzeWithRules(nonScalarChanges, docs), []);
+});
+
 test("rule analysis detects zero-valued defaults and compares boolean values", () => {
   const zeroChangedFiles = [{
     filename: "src/config/retries.js",
@@ -754,6 +773,49 @@ test("GitHub service uses REST headers, blocks private repositories, and retriev
   await assert.rejects(timedOutGitHub.getPublicRepository("acme", "payments"), (error) => error.code === "GITHUB_TIMEOUT");
 });
 
+test("GitHub service handles missing repositories, rate limits, empty PR lists, missing patches, and network failures", async () => {
+  const missingRepository = new GitHubService({
+    fetchFn: async () => new Response(JSON.stringify({ message: "Not Found" }), { status: 404 })
+  });
+  await assert.rejects(missingRepository.getPublicRepository("acme", "missing"), (error) => error.code === "GITHUB_NOT_FOUND");
+
+  const rateLimited = new GitHubService({
+    fetchFn: async () => new Response(JSON.stringify({ message: "API rate limit exceeded" }), {
+      status: 403,
+      headers: { "x-ratelimit-remaining": "0" }
+    })
+  });
+  await assert.rejects(rateLimited.getPublicRepository("acme", "payments"), (error) => error.code === "GITHUB_AUTH_OR_RATE_LIMIT");
+
+  const publicRepository = {
+    owner: { login: "acme" },
+    name: "payments",
+    full_name: "acme/payments",
+    default_branch: "main",
+    private: false,
+    html_url: "https://github.com/acme/payments"
+  };
+  const emptyPullRequestList = new GitHubService({
+    fetchFn: async (url) => new Response(JSON.stringify(
+      new URL(url).pathname.endsWith("/pulls") ? [] : publicRepository
+    ), { status: 200 })
+  });
+  assert.deepEqual((await emptyPullRequestList.listPullRequests("acme", "payments")).pullRequests, []);
+
+  const missingPatch = new GitHubService({
+    fetchFn: async (url) => new Response(JSON.stringify(
+      new URL(url).pathname.endsWith("/files")
+        ? [{ filename: "src/generated.js", status: "modified" }]
+        : publicRepository
+    ), { status: 200 })
+  });
+  const changed = await missingPatch.getPullRequestFiles("acme", "payments", 8);
+  assert.equal(changed.files[0].patch, "");
+
+  const unavailable = new GitHubService({ fetchFn: async () => { throw new Error("network unavailable"); } });
+  await assert.rejects(unavailable.getPublicRepository("acme", "payments"), (error) => error.code === "GITHUB_UNAVAILABLE");
+});
+
 test("API routes return consistent JSON, validate inputs, and serve the frontend", async () => {
   const mockResults = {
     analysisId: "test-analysis",
@@ -761,13 +823,17 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     findings: []
   };
   let analysisRequestCount = 0;
+  let documentationChangedFiles = [];
   const services = {
     githubService: {
       getPublicRepository: async (owner, repo) => ({ owner, name: repo, fullName: `${owner}/${repo}`, private: false }),
       listPullRequests: async () => ({ pullRequests: [{ number: 8, title: "Update timeout" }] }),
       getPullRequest: async () => ({ pullRequest: { number: 8, title: "Update timeout" } }),
       getPullRequestFiles: async () => ({ files: changedFiles, truncated: false }),
-      getDocumentation: async () => ({ documents, truncated: false })
+      getDocumentation: async (_owner, _repo, files) => {
+        documentationChangedFiles = files;
+        return { documents, truncated: false };
+      }
     },
     aiService: { providerName: "Example Provider", configured: false, missingSettings: [] },
     analysisService: {
@@ -822,6 +888,17 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     const pullRequests = await fetch(`${address}/api/repositories/acme/payments/pulls`).then((response) => response.json());
     assert.equal(pullRequests.data.pullRequests[0].number, 8);
 
+    const pullRequestDetails = await fetch(`${address}/api/repositories/acme/payments/pulls/8`).then((response) => response.json());
+    assert.equal(pullRequestDetails.data.pullRequest.number, 8);
+
+    const changedFileResponse = await fetch(`${address}/api/repositories/acme/payments/pulls/8/files`).then((response) => response.json());
+    assert.equal(changedFileResponse.data.files[0].filename, "src/config/http.js");
+    assert.match(changedFileResponse.data.files[0].patch, /requestTimeoutMs/);
+
+    const documentationResponse = await fetch(`${address}/api/repositories/acme/payments/documentation?pullNumber=8`).then((response) => response.json());
+    assert.equal(documentationResponse.data.documents[0].path, "README.md");
+    assert.deepEqual(documentationChangedFiles, changedFiles);
+
     const started = await fetch(`${address}/api/repositories/acme/payments/pulls/8/analyze`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -853,7 +930,15 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
 
     const saved = await fetch(`${address}/api/analysis/test-analysis`).then((response) => response.json());
     assert.equal(saved.data.analysisId, "test-analysis");
+    assert.deepEqual(saved.data.findings, []);
 
+    const dashboard = await fetch(`${address}/`);
+    const dashboardHtml = await dashboard.text();
+    assert.equal(dashboard.status, 200);
+    assert.match(dashboardHtml, /id="liveRepositoryForm"/);
+    assert.match(dashboardHtml, /id="demoDashboard" hidden/);
+    assert.match(dashboardHtml, /id="showDemoMode"/);
+    assert.doesNotMatch(dashboardHtml, /type="file"|simulated in this browser/i);
     const frontend = await fetch(`${address}/analysis-results.html`);
     assert.equal(frontend.status, 200);
     assert.match(await frontend.text(), /Analyze a GitHub pull request/);
@@ -864,6 +949,17 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     assert.match(frontendSource, /health\.ai\.provider/);
     assert.match(frontendSource, /analysis was used/);
     assert.match(frontendSource, /rule-based fallback/);
+
+    const liveDashboardScript = await fetch(`${address}/live-dashboard.js`);
+    assert.equal(liveDashboardScript.status, 200);
+    assert.match(await liveDashboardScript.text(), /No evidence-backed documentation mismatches were found/);
+
+    const uploadPage = await fetch(`${address}/document-upload.html`);
+    const uploadHtml = await uploadPage.text();
+    assert.equal(uploadPage.status, 200);
+    assert.match(uploadHtml, /Document upload is unavailable/);
+    assert.doesNotMatch(uploadHtml, /type="file"|simulated in this browser/i);
+    assert.doesNotMatch(await (await fetch(`${address}/document-upload.js`)).text(), /startDemoUpload|setInterval/);
 
     const themeScript = await fetch(`${address}/theme.js`);
     assert.equal(themeScript.status, 200);
