@@ -143,6 +143,51 @@ test("AI evidence is retained only when both excerpts exist in fetched sources",
   assert.ok(verifyAiFinding(removedLineFinding, 0, changedFiles, documents));
 });
 
+test("AI evidence accepts changed lines starting with doubled signs but rejects file headers", () => {
+  const valid = {
+    title: "Changed option may need documentation",
+    severity: "Medium",
+    codeFile: "src/config/http.js",
+    docsFile: "README.md",
+    codeEvidence: "++counter = true",
+    docsEvidence: "The request timeout is 60 seconds by default.",
+    description: "A changed option needs review against the guide.",
+    suggestion: "Update the documentation."
+  };
+  const addedOperatorLine = [{
+    filename: "src/config/http.js",
+    patch: "+++counter = true"
+  }];
+  assert.ok(verifyAiFinding(valid, 0, addedOperatorLine, documents));
+
+  const removedOperatorLine = [{
+    filename: "src/config/http.js",
+    patch: "---counter = true"
+  }];
+  assert.ok(verifyAiFinding({
+    ...valid,
+    codeEvidence: "--counter = true"
+  }, 0, removedOperatorLine, documents));
+
+  const addedFileHeader = [{
+    filename: "src/config/http.js",
+    patch: "+++ b/src/config/http.js"
+  }];
+  assert.equal(verifyAiFinding({
+    ...valid,
+    codeEvidence: "b/src/config/http.js"
+  }, 0, addedFileHeader, documents), null);
+
+  const removedFileHeader = [{
+    filename: "src/config/http.js",
+    patch: "--- a/src/config/http.js"
+  }];
+  assert.equal(verifyAiFinding({
+    ...valid,
+    codeEvidence: "a/src/config/http.js"
+  }, 0, removedFileHeader, documents), null);
+});
+
 test("analysis uses rule fallback when AI is not configured and stores retrievable results", async () => {
   const githubService = createMockGitHubService();
   let documentationRankedWith;
