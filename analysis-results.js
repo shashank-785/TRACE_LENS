@@ -1,90 +1,12 @@
 "use strict";
 
-const findings = [
-  {
-    id: "TL-104",
-    severity: "Critical",
-    status: "Open",
-    title: "Refresh token lifetime no longer matches the guide",
-    codeFile: "src/auth/session.ts",
-    codeReference: "src/auth/session.ts:42",
-    documentationFile: "docs/authentication.md",
-    documentationReference: "Authentication > Refresh tokens",
-    outdatedStatement: "Refresh tokens are optional and remain valid for 30 days.",
-    currentCodeValue: "refreshToken: { required: true, expiresIn: '7d' }",
-    suggestion: "Refresh tokens are required and remain valid for 7 days.",
-    changeContext: "The authentication change makes refresh tokens mandatory and shortens their lifetime. Update both the setup steps and the token-lifetime description."
-  },
-  {
-    id: "TL-103",
-    severity: "High",
-    status: "Open",
-    title: "Default request timeout was reduced",
-    codeFile: "src/config/http.ts",
-    codeReference: "src/config/http.ts:18",
-    documentationFile: "README.md",
-    documentationReference: "Configuration > Network",
-    outdatedStatement: "Requests time out after 60 seconds by default.",
-    currentCodeValue: "requestTimeoutMs: 30_000",
-    suggestion: "Requests time out after 30 seconds by default.",
-    changeContext: "The default HTTP client timeout changed from 60 seconds to 30 seconds. Custom per-request timeouts are unaffected."
-  },
-  {
-    id: "TL-102",
-    severity: "High",
-    status: "Reviewed",
-    title: "CSV is no longer the only supported export format",
-    codeFile: "src/reports/export.ts",
-    codeReference: "src/reports/export.ts:67",
-    documentationFile: "docs/reports.md",
-    documentationReference: "Exporting reports",
-    outdatedStatement: "Reports can only be downloaded as a CSV file.",
-    currentCodeValue: "supportedFormats: ['csv', 'json']",
-    suggestion: "Reports can be downloaded as CSV or JSON files.",
-    changeContext: "The export handler now accepts JSON in addition to CSV. Confirm that the UI and command-line examples mention both formats."
-  },
-  {
-    id: "TL-101",
-    severity: "Medium",
-    status: "Open",
-    title: "The minimum Node.js version has changed",
-    codeFile: "package.json",
-    codeReference: "package.json:engines.node",
-    documentationFile: "CONTRIBUTING.md",
-    documentationReference: "Development setup > Prerequisites",
-    outdatedStatement: "Install Node.js 18 or newer before contributing.",
-    currentCodeValue: "\"node\": \">=20\"",
-    suggestion: "Install Node.js 20 or newer before contributing.",
-    changeContext: "The project now depends on runtime features available in Node.js 20. Update the contributor prerequisites and local setup instructions."
-  },
-  {
-    id: "TL-100",
-    severity: "Medium",
-    status: "Resolved",
-    title: "Retry attempts are limited to two",
-    codeFile: "src/client/retry.ts",
-    codeReference: "src/client/retry.ts:25",
-    documentationFile: "docs/api-client.md",
-    documentationReference: "Client options > Retries",
-    outdatedStatement: "The client retries failed requests up to five times.",
-    currentCodeValue: "maxRetries = 2",
-    suggestion: "The client retries failed requests up to two times.",
-    changeContext: "The retry policy was reduced to limit repeated requests. This finding is shown as resolved in the sample review state."
-  },
-  {
-    id: "TL-099",
-    severity: "Low",
-    status: "Open",
-    title: "The health endpoint now returns a version field",
-    codeFile: "src/routes/health.ts",
-    codeReference: "src/routes/health.ts:12",
-    documentationFile: "docs/operations.md",
-    documentationReference: "Health checks > Response",
-    outdatedStatement: "The health endpoint returns only a status field.",
-    currentCodeValue: "{ status: 'ok', version: appVersion }",
-    suggestion: "The health endpoint returns status and version fields.",
-    changeContext: "The health response now includes the deployed application version to help identify running builds."
-  }
+let findings = [
+  { id: "TL-104", severity: "High", status: "Open", title: "Refresh token lifetime no longer matches the guide", codeFile: "src/auth/session.ts", codeReference: "src/auth/session.ts:42", docsFile: "docs/authentication.md", docsReference: "Authentication > Refresh tokens", outdated: "Refresh tokens remain valid for 30 days.", codeValue: "expiresIn: '7d'", suggestion: "Refresh tokens remain valid for 7 days.", context: "The authentication change shortens refresh token lifetime from 30 to 7 days." },
+  { id: "TL-103", severity: "High", status: "Open", title: "Default request timeout was reduced", codeFile: "src/config/http.ts", codeReference: "src/config/http.ts:18", docsFile: "README.md", docsReference: "Configuration > Network", outdated: "Requests time out after 60 seconds by default.", codeValue: "requestTimeoutMs: 30_000", suggestion: "Requests time out after 30 seconds by default.", context: "The default HTTP client timeout changed from 60 seconds to 30 seconds." },
+  { id: "TL-102", severity: "Medium", status: "Reviewed", title: "CSV is no longer the only export format", codeFile: "src/reports/export.ts", codeReference: "src/reports/export.ts:67", docsFile: "docs/reports.md", docsReference: "Exporting reports", outdated: "Reports can only be downloaded as CSV.", codeValue: "formats: ['csv', 'json']", suggestion: "Reports can be downloaded as CSV or JSON.", context: "The export handler now supports JSON in addition to CSV." },
+  { id: "TL-101", severity: "Medium", status: "Open", title: "Minimum Node.js version has changed", codeFile: "package.json", codeReference: "package.json:engines.node", docsFile: "CONTRIBUTING.md", docsReference: "Development setup > Prerequisites", outdated: "Install Node.js 18 or newer before contributing.", codeValue: "\"node\": \">=20\"", suggestion: "Install Node.js 20 or newer before contributing.", context: "The project now depends on runtime features available in Node.js 20." },
+  { id: "TL-100", severity: "Low", status: "Resolved", title: "Retry attempts are limited to two", codeFile: "src/client/retry.ts", codeReference: "src/client/retry.ts:25", docsFile: "docs/api-client.md", docsReference: "Client options > Retries", outdated: "The client retries failed requests up to five times.", codeValue: "maxRetries = 2", suggestion: "The client retries failed requests up to two times.", context: "The retry policy was reduced to limit repeated requests." },
+  { id: "TL-099", severity: "Low", status: "Open", title: "Health endpoint now returns a version field", codeFile: "src/routes/health.ts", codeReference: "src/routes/health.ts:12", docsFile: "docs/operations.md", docsReference: "Health checks > Response", outdated: "The health endpoint returns only a status field.", codeValue: "{ status: 'ok', version: appVersion }", suggestion: "The health endpoint returns status and version fields.", context: "The health response now includes the deployed application version." }
 ];
 
 const findingsList = document.getElementById("findingsList");
@@ -95,83 +17,248 @@ const emptyState = document.getElementById("emptyState");
 const loadingState = document.getElementById("loadingState");
 const errorState = document.getElementById("errorState");
 const resultsCount = document.getElementById("resultsCount");
-const findingCount = document.getElementById("findingCount");
-const modalBackdrop = document.getElementById("findingModalBackdrop");
-const modal = modalBackdrop.querySelector('[role="dialog"]');
 const toast = document.getElementById("resultsToast");
+const repositoryForm = document.getElementById("repositoryForm");
+const repositoryInput = document.getElementById("repositoryUrl");
+const validateRepositoryButton = document.getElementById("validateRepositoryButton");
+const pullRequestSelect = document.getElementById("pullRequestSelect");
+const analyzePullRequestButton = document.getElementById("analyzePullRequestButton");
+const useBharatCodeCheckbox = document.getElementById("useBharatCode");
+const backendStatus = document.getElementById("backendStatus");
+const workflowStatus = document.getElementById("workflowStatus");
+const API_BASE_URL = `${window.location.origin}/api`;
 let toastTimer;
-let modalOpener;
 let loaded = false;
+let liveAnalysis = false;
+let validatedRepository = null;
 
 function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[character]);
 }
 
 function updateSummary() {
   document.getElementById("totalFindings").textContent = findings.length;
-  document.getElementById("criticalHighFindings").textContent = findings.filter((finding) =>
-    finding.severity === "Critical" || finding.severity === "High"
-  ).length;
-  const affectedFiles = new Set(findings.flatMap((finding) => [finding.codeFile, finding.documentationFile]));
+  document.getElementById("priorityFindings").textContent = findings.filter((finding) => finding.severity === "High").length;
+  const affectedFiles = new Set(findings.flatMap((finding) => [finding.codeFile, finding.docsFile]));
   document.getElementById("affectedFiles").textContent = affectedFiles.size;
   document.getElementById("needsReview").textContent = findings.filter((finding) => finding.status === "Open").length;
 }
 
 function renderFindings() {
   if (!loaded) return;
-
   const query = searchInput.value.trim().toLowerCase();
   const severity = severityFilter.value;
   const status = statusFilter.value;
-  const visibleFindings = findings.filter((finding) => {
-    const matchesText = `${finding.title} ${finding.codeFile} ${finding.documentationFile}`.toLowerCase().includes(query);
-    return matchesText
-      && (severity === "all" || finding.severity === severity)
-      && (status === "all" || finding.status === status);
+  const visible = findings.filter((finding) => {
+    const matchesText = `${finding.title} ${finding.codeFile} ${finding.docsFile}`.toLowerCase().includes(query);
+    return matchesText && (severity === "all" || finding.severity === severity) && (status === "all" || finding.status === status);
   });
 
-  findingsList.innerHTML = visibleFindings.map((finding) => {
-    const severityClass = finding.severity.toLowerCase();
-    const statusClass = finding.status.toLowerCase();
+  findingsList.innerHTML = visible.map((finding) => {
     const reviewed = finding.status !== "Open";
-    return `<article class="finding-card" data-finding-id="${escapeHtml(finding.id)}">
+    return `<article class="finding-card">
       <div class="finding-card-heading">
-        <div class="finding-badges">
-          <span class="finding-severity ${severityClass}"><i></i>${escapeHtml(finding.severity)}</span>
-          <span class="finding-status ${statusClass}">${escapeHtml(finding.status)}</span>
-        </div>
+        <div class="finding-badges"><span class="finding-severity ${finding.severity.toLowerCase()}"><i></i>${escapeHtml(finding.severity)}</span><span class="finding-status ${finding.status.toLowerCase()}">${escapeHtml(finding.status)}</span></div>
         <span class="finding-id">${escapeHtml(finding.id)}</span>
       </div>
       <h3 class="finding-title">${escapeHtml(finding.title)}</h3>
-      <div class="finding-files">
-        <div class="finding-file"><span>CODE CHANGE</span><code>${escapeHtml(finding.codeReference)}</code></div>
-        <div class="finding-file"><span>RELATED DOCUMENTATION</span><code>${escapeHtml(finding.documentationFile)}</code></div>
-      </div>
-      <div class="finding-mismatch">
-        <div><span class="finding-field-label">OUTDATED DOCUMENTATION</span><p>${escapeHtml(finding.outdatedStatement)}</p></div>
-        <div><span class="finding-field-label">CURRENT CODE</span><code>${escapeHtml(finding.currentCodeValue)}</code></div>
-      </div>
+      <div class="finding-files"><div class="finding-file"><span>CODE CHANGE</span><code>${escapeHtml(finding.codeReference)}</code></div><div class="finding-file"><span>RELATED DOCUMENTATION</span><code>${escapeHtml(finding.docsFile)}</code></div></div>
+      <div class="finding-mismatch"><div><span class="finding-field-label">OUTDATED DOCUMENTATION</span><p>${escapeHtml(finding.outdated)}</p></div><div><span class="finding-field-label">CURRENT CODE</span><code>${escapeHtml(finding.codeValue)}</code></div></div>
       <div class="finding-suggestion"><span class="finding-field-label">SUGGESTED DOCUMENTATION FIX</span><p>${escapeHtml(finding.suggestion)}</p></div>
-      <div class="finding-actions">
-        <button class="button button-secondary finding-detail-button" type="button" data-action="details" data-finding-id="${escapeHtml(finding.id)}">View details</button>
-        <button class="button button-secondary" type="button" data-action="copy" data-finding-id="${escapeHtml(finding.id)}"><svg class="icon tiny" aria-hidden="true"><use href="#i-copy"/></svg>Copy suggestion</button>
-        <button class="button button-primary finding-review-button" type="button" data-action="review" data-finding-id="${escapeHtml(finding.id)}"${reviewed ? " disabled" : ""}>${reviewed ? escapeHtml(finding.status) : "Mark reviewed"}</button>
-      </div>
+      <details class="finding-details"><summary>View finding details</summary><div class="finding-detail-grid"><div><span class="finding-field-label">CHANGE CONTEXT</span><p>${escapeHtml(finding.context)}</p></div><div><span class="finding-field-label">DOCUMENTATION SECTION</span><p>${escapeHtml(finding.docsReference)}</p></div></div></details>
+      <div class="finding-actions"><button class="button button-secondary" type="button" data-action="copy" data-finding-id="${escapeHtml(finding.id)}"><svg class="icon tiny" aria-hidden="true"><use href="#i-copy"/></svg>Copy suggestion</button><button class="button button-primary finding-review-button" type="button" data-action="review" data-finding-id="${escapeHtml(finding.id)}"${reviewed ? " disabled" : ""}>${reviewed ? escapeHtml(finding.status) : "Mark reviewed"}</button></div>
     </article>`;
   }).join("");
 
-  findingCount.textContent = visibleFindings.length;
-  resultsCount.textContent = `Showing ${visibleFindings.length} of ${findings.length} findings`;
-  emptyState.hidden = visibleFindings.length > 0;
-  findingsList.hidden = visibleFindings.length === 0;
+  document.getElementById("findingCount").textContent = visible.length;
+  resultsCount.textContent = `Showing ${visible.length} of ${findings.length} findings`;
+  resultsCount.hidden = false;
+  findingsList.hidden = visible.length === 0;
+  emptyState.hidden = visible.length !== 0;
+  const noFindings = liveAnalysis && findings.length === 0;
+  document.getElementById("emptyStateTitle").textContent = noFindings
+    ? "No evidence-backed mismatches found"
+    : "No findings match your filters";
+  document.getElementById("emptyStateDescription").textContent = noFindings
+    ? "The analyzed pull request contained no documentation mismatches that could be verified."
+    : "Try a different search, severity, or status.";
+  document.getElementById("clearFilters").hidden = noFindings;
   updateSummary();
 }
+
+async function apiRequest(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: { Accept: "application/json", ...(options.headers || {}) }
+    });
+  } catch {
+    throw new Error("The backend could not be reached. Start it and try again.");
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload || payload.success !== true) {
+    throw new Error(payload?.error?.message || `The backend returned an unexpected response (${response.status}).`);
+  }
+  return payload.data;
+}
+
+function setWorkflowStatus(message, kind = "") {
+  workflowStatus.textContent = message;
+  workflowStatus.classList.toggle("error", kind === "error");
+  workflowStatus.classList.toggle("success", kind === "success");
+}
+
+function setPullRequestOptions(pullRequests) {
+  pullRequestSelect.replaceChildren();
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = pullRequests.length ? "Select an open pull request" : "No open pull requests found";
+  pullRequestSelect.append(placeholder);
+
+  for (const pullRequest of pullRequests) {
+    const option = document.createElement("option");
+    option.value = String(pullRequest.number);
+    option.textContent = `#${pullRequest.number} · ${pullRequest.title}`;
+    pullRequestSelect.append(option);
+  }
+  pullRequestSelect.disabled = pullRequests.length === 0;
+  analyzePullRequestButton.disabled = true;
+}
+
+async function checkBackendHealth() {
+  try {
+    const health = await apiRequest("/health");
+    backendStatus.textContent = "Backend online";
+    backendStatus.classList.remove("offline");
+    backendStatus.classList.add("online");
+    useBharatCodeCheckbox.disabled = !health.ai.configured;
+    if (health.ai.configured) {
+      setWorkflowStatus("Backend ready. BharatCode AI is available as an opt-in; rule-based analysis works without it.");
+    } else {
+      setWorkflowStatus("Backend ready. BharatCode AI is not configured; rule-based analysis will be used.");
+    }
+  } catch (error) {
+    backendStatus.textContent = "Backend offline";
+    backendStatus.classList.remove("online");
+    backendStatus.classList.add("offline");
+    useBharatCodeCheckbox.disabled = true;
+    setWorkflowStatus(`${error.message} Sample findings remain visible.`, "error");
+  }
+}
+
+repositoryForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  validatedRepository = null;
+  setPullRequestOptions([]);
+  validateRepositoryButton.disabled = true;
+  validateRepositoryButton.textContent = "Validating…";
+  setWorkflowStatus("Validating the repository and loading open pull requests.");
+
+  try {
+    const validation = await apiRequest("/repositories/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repositoryUrl: repositoryInput.value.trim() })
+    });
+    const repository = validation.repository;
+    const pullRequestData = await apiRequest(
+      `/repositories/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/pulls`
+    );
+    validatedRepository = repository;
+    setPullRequestOptions(pullRequestData.pullRequests);
+    if (pullRequestData.pullRequests.length) {
+      setWorkflowStatus(`Validated ${repository.fullName}. Choose an open pull request to analyze.`, "success");
+    } else {
+      setWorkflowStatus(`Validated ${repository.fullName}, but it has no open pull requests.`);
+    }
+  } catch (error) {
+    setWorkflowStatus(`Repository validation failed: ${error.message}`, "error");
+  } finally {
+    validateRepositoryButton.disabled = false;
+    validateRepositoryButton.textContent = "Validate repository";
+  }
+});
+
+repositoryInput.addEventListener("input", () => {
+  if (!validatedRepository) return;
+  validatedRepository = null;
+  setPullRequestOptions([]);
+  setWorkflowStatus("Validate the updated repository URL before selecting a pull request.");
+});
+
+pullRequestSelect.addEventListener("change", () => {
+  analyzePullRequestButton.disabled = !validatedRepository || !pullRequestSelect.value;
+});
+
+function normalizeBackendFindings(items) {
+  if (!Array.isArray(items)) throw new Error("The analysis response did not contain a findings list.");
+  return items.map((finding, index) => {
+    if (!finding || typeof finding !== "object" ||
+        !["High", "Medium", "Low"].includes(finding.severity) ||
+        !finding.title || !finding.codeFile || !finding.docsFile || !finding.suggestion) {
+      throw new Error(`Finding ${index + 1} was missing required, verifiable fields.`);
+    }
+    return {
+      ...finding,
+      id: finding.id || `F-${index + 1}`,
+      status: finding.status || "Open",
+      codeReference: finding.codeReference || finding.codeFile,
+      docsReference: finding.docsReference || finding.docsFile,
+      outdated: finding.outdated || finding.docsEvidence || "",
+      codeValue: finding.codeValue || finding.codeEvidence || "",
+      context: finding.context || finding.description || ""
+    };
+  });
+}
+
+analyzePullRequestButton.addEventListener("click", async () => {
+  if (!validatedRepository || !pullRequestSelect.value) {
+    setWorkflowStatus("Validate a repository and select a pull request first.", "error");
+    return;
+  }
+
+  const pullNumber = Number(pullRequestSelect.value);
+  analyzePullRequestButton.disabled = true;
+  analyzePullRequestButton.textContent = "Analyzing…";
+  setWorkflowStatus("Fetching changed files and documentation for evidence-based analysis.");
+
+  try {
+    const path = `/repositories/${encodeURIComponent(validatedRepository.owner)}/${encodeURIComponent(validatedRepository.name)}/pulls/${pullNumber}/analyze`;
+    const started = await apiRequest(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ useAi: useBharatCodeCheckbox.checked })
+    });
+    if (!started.analysisId) throw new Error("The backend did not return an analysis ID.");
+    const result = await apiRequest(`/analysis/${encodeURIComponent(started.analysisId)}`);
+    const updatedFindings = normalizeBackendFindings(result.findings);
+
+    findings = updatedFindings;
+    liveAnalysis = true;
+    searchInput.value = "";
+    severityFilter.value = "all";
+    statusFilter.value = "all";
+    document.getElementById("analysisDataPill").lastChild.textContent = " LIVE ANALYSIS";
+    document.getElementById("analysisDataLabel").lastChild.textContent = "Evidence-backed results";
+    document.getElementById("analysisFooterStatus").textContent = "LIVE REPOSITORY ANALYSIS";
+    loaded = true;
+    renderFindings();
+
+    const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+    const provider = result.provider || "rules";
+    const summary = `Analysis complete for ${result.repository}#${pullNumber}: ${findings.length} verified finding(s) using ${provider}.`;
+    setWorkflowStatus([summary, ...warnings].join(" "), "success");
+  } catch (error) {
+    setWorkflowStatus(`Analysis failed: ${error.message} Existing findings were kept.`, "error");
+  } finally {
+    analyzePullRequestButton.disabled = !pullRequestSelect.value;
+    analyzePullRequestButton.textContent = "Analyze pull request";
+  }
+});
 
 function showToast(message) {
   document.getElementById("resultsToastMessage").textContent = message;
@@ -180,172 +267,100 @@ function showToast(message) {
   toastTimer = window.setTimeout(() => toast.classList.remove("visible"), 2300);
 }
 
-function copyWithFallback(text) {
-  const field = document.createElement("textarea");
-  field.value = text;
-  field.style.position = "fixed";
-  field.style.opacity = "0";
-  document.body.appendChild(field);
-  try {
-    field.select();
-    return document.execCommand("copy");
-  } catch (error) {
-    return false;
-  } finally {
-    field.remove();
-  }
-}
-
 async function copySuggestion(finding) {
-  if (navigator.clipboard && window.isSecureContext) {
-    try {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(finding.suggestion);
-      showToast("Suggested documentation fix copied");
-      return;
-    } catch (error) {
-      // Fall back when clipboard permission or browser support prevents the write.
+    } else {
+      const field = document.createElement("textarea");
+      field.value = finding.suggestion;
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      const copied = document.execCommand("copy");
+      field.remove();
+      if (!copied) throw new Error("Clipboard unavailable");
     }
+    showToast("Suggested documentation fix copied");
+  } catch (error) {
+    showToast("Copy unavailable in this browser");
   }
-
-  showToast(copyWithFallback(finding.suggestion)
-    ? "Suggested documentation fix copied"
-    : "Copy unavailable in this browser");
-}
-
-function fieldMarkup(label, value, code) {
-  const content = code
-    ? `<code>${escapeHtml(value)}</code>`
-    : `<p>${escapeHtml(value)}</p>`;
-  return `<div class="finding-detail-field"><span class="finding-field-label">${escapeHtml(label)}</span>${content}</div>`;
-}
-
-function openFindingModal(finding, opener) {
-  modalOpener = opener;
-  document.getElementById("findingModalEyebrow").textContent = `${finding.id} · ${finding.severity.toUpperCase()} SEVERITY`;
-  document.getElementById("findingModalTitle").textContent = finding.title;
-  document.getElementById("findingModalContent").innerHTML = `
-    <p class="analysis-modal-intro" id="findingModalIntro">${escapeHtml(finding.changeContext)}</p>
-    <div class="analysis-modal-fields">
-      ${fieldMarkup("STATUS", finding.status, false)}
-      ${fieldMarkup("CODE FILE / LINE", finding.codeReference, true)}
-      ${fieldMarkup("RELATED DOCUMENTATION", finding.documentationFile, true)}
-      ${fieldMarkup("DOCUMENTATION SECTION", finding.documentationReference, false)}
-      ${fieldMarkup("OUTDATED DOCUMENTATION STATEMENT", finding.outdatedStatement, false)}
-      ${fieldMarkup("CURRENT CODE VALUE / CHANGE", finding.currentCodeValue, true)}
-      ${fieldMarkup("SUGGESTED DOCUMENTATION FIX", finding.suggestion, false)}
-    </div>`;
-  modalBackdrop.hidden = false;
-  document.getElementById("closeFindingModal").focus();
-}
-
-function closeFindingModal() {
-  if (modalBackdrop.hidden) return;
-  modalBackdrop.hidden = true;
-  if (modalOpener) modalOpener.focus();
-}
-
-function markReviewed(finding) {
-  if (finding.status !== "Open") return;
-  finding.status = "Reviewed";
-  renderFindings();
-  const reviewButton = findingsList.querySelector(`[data-action="review"][data-finding-id="${finding.id}"]`);
-  (reviewButton || searchInput).focus();
-  showToast(`${finding.id} marked as reviewed`);
-}
-
-function clearFilters() {
-  searchInput.value = "";
-  severityFilter.value = "all";
-  statusFilter.value = "all";
-  renderFindings();
-  searchInput.focus();
 }
 
 function loadAnalysis() {
   loaded = false;
   loadingState.hidden = false;
   errorState.hidden = true;
-  resultsCount.hidden = true;
   findingsList.hidden = true;
   emptyState.hidden = true;
-
+  resultsCount.hidden = true;
   window.setTimeout(() => {
     if (new URLSearchParams(window.location.search).get("analysisError") === "1") {
       loadingState.hidden = true;
       errorState.hidden = false;
+      loaded = false;
       return;
     }
-
     loaded = true;
     loadingState.hidden = true;
+    errorState.hidden = true;
     renderFindings();
-  }, 400);
+  }, 450);
 }
-
-findingsList.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-action]");
-  if (!button) return;
-  const finding = findings.find((item) => item.id === button.dataset.findingId);
-  if (!finding) return;
-
-  if (button.dataset.action === "details") openFindingModal(finding, button);
-  if (button.dataset.action === "copy") copySuggestion(finding);
-  if (button.dataset.action === "review") markReviewed(finding);
-});
 
 searchInput.addEventListener("input", renderFindings);
 severityFilter.addEventListener("change", renderFindings);
 statusFilter.addEventListener("change", renderFindings);
-document.getElementById("clearFilters").addEventListener("click", clearFilters);
+document.getElementById("clearFilters").addEventListener("click", () => {
+  searchInput.value = "";
+  severityFilter.value = "all";
+  statusFilter.value = "all";
+  renderFindings();
+  searchInput.focus();
+});
 document.getElementById("retryAnalysis").addEventListener("click", () => {
   const url = new URL(window.location.href);
   url.searchParams.delete("analysisError");
   window.history.replaceState({}, "", url);
   loadAnalysis();
+  checkBackendHealth();
 });
-document.getElementById("closeFindingModal").addEventListener("click", closeFindingModal);
-document.getElementById("doneFindingModal").addEventListener("click", closeFindingModal);
-modalBackdrop.addEventListener("click", (event) => {
-  if (event.target === modalBackdrop) closeFindingModal();
+findingsList.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const finding = findings.find((item) => item.id === button.dataset.findingId);
+  if (!finding) return;
+  if (button.dataset.action === "copy") copySuggestion(finding);
+  if (button.dataset.action === "review" && finding.status === "Open") {
+    finding.status = "Reviewed";
+    renderFindings();
+    showToast(`${finding.id} marked as reviewed`);
+  }
+});
+const resultsMenuButton = document.getElementById("resultsMenuButton");
+const resultsNavigation = document.getElementById("resultsNavigation");
+
+resultsMenuButton.addEventListener("click", () => {
+  const open = !resultsNavigation.classList.contains("open");
+  resultsNavigation.classList.toggle("open", open);
+  resultsMenuButton.setAttribute("aria-expanded", String(open));
+  resultsMenuButton.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+});
+resultsNavigation.querySelectorAll("a").forEach((link) => {
+  link.addEventListener("click", () => {
+    resultsNavigation.classList.remove("open");
+    resultsMenuButton.setAttribute("aria-expanded", "false");
+    resultsMenuButton.setAttribute("aria-label", "Open navigation");
+  });
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    closeFindingModal();
-    const menuButton = document.getElementById("resultsMenuButton");
-    const navigation = document.getElementById("resultsNavigation");
-    navigation.classList.remove("open");
-    menuButton.setAttribute("aria-expanded", "false");
-    menuButton.setAttribute("aria-label", "Open navigation");
+    resultsNavigation.classList.remove("open");
+    resultsMenuButton.setAttribute("aria-expanded", "false");
+    resultsMenuButton.setAttribute("aria-label", "Open navigation");
   }
-
-  if (event.key === "Tab" && !modalBackdrop.hidden) {
-    const focusable = Array.from(modal.querySelectorAll("button:not(:disabled), a[href], [tabindex]:not([tabindex='-1'])"));
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-});
-
-document.querySelectorAll("#resultsNavigation .nav-link").forEach((link) => {
-  link.addEventListener("click", () => {
-    document.getElementById("resultsNavigation").classList.remove("open");
-    const menuButton = document.getElementById("resultsMenuButton");
-    menuButton.setAttribute("aria-expanded", "false");
-    menuButton.setAttribute("aria-label", "Open navigation");
-  });
-});
-document.getElementById("resultsMenuButton").addEventListener("click", (event) => {
-  const navigation = document.getElementById("resultsNavigation");
-  const open = !navigation.classList.contains("open");
-  navigation.classList.toggle("open", open);
-  event.currentTarget.setAttribute("aria-expanded", String(open));
-  event.currentTarget.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
 });
 
 loadAnalysis();
+checkBackendHealth();

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090611">
+  <meta name="description" content="Upload documentation to the TRACE LENS demo workspace">
+  <title>TRACE LENS — Document Upload</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="upload-page">
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-lens" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5M8 11h5M10.5 8.5v5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-git-pull" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v12m12-6V9a6 6 0 0 0-6-6h-1m0 0 3-3m-3 3 3 3"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 0 4 22z"/><path d="M4 5v17m5-15h7m-7 4h7"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8"/><path d="M3 3v5h5m4-1v5l3 2"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4m0 4h.01"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6m-12 5h8m-8 4h8"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v4h16v-4"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </svg>
+
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <header class="topbar">
+    <a class="brand" href="index.html#overview" aria-label="TRACE LENS Dashboard">
+      <span class="brand-mark"><svg class="icon"><use href="#i-lens"/></svg></span>
+      <span class="brand-name">TRACE<span>LENS</span></span>
+    </a>
+    <span class="topbar-divider"></span>
+    <a class="upload-repo-link" href="index.html#overview"><span class="repo-mini-icon" aria-hidden="true">⌘</span><span>trace-lens/<strong>demo-project</strong></span></a>
+    <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="mainNav"><svg class="icon"><use href="#i-menu"/></svg></button>
+    <nav class="main-nav" id="mainNav" aria-label="Main navigation">
+      <a class="nav-link" href="index.html#overview"><svg class="icon"><use href="#i-grid"/></svg>Dashboard</a>
+      <a class="nav-link" href="index.html#pull-requests"><svg class="icon"><use href="#i-git-pull"/></svg>Pull requests</a>
+      <a class="nav-link" href="index.html#drift-details"><svg class="icon"><use href="#i-book"/></svg>Documentation</a>
+      <a class="nav-link active" href="document-upload.html" aria-current="page"><svg class="icon"><use href="#i-upload"/></svg>Document Upload</a>
+      <a class="nav-link" href="analysis-results.html"><svg class="icon"><use href="#i-alert"/></svg>Analysis Results</a>
+      <a class="nav-link" href="index.html#history"><svg class="icon"><use href="#i-history"/></svg>History</a>
+    </nav>
+    <div class="topbar-right">
+      <div class="connection"><span class="connection-dot"></span><span>GitHub <b>demo</b></span></div>
+    </div>
+  </header>
+
+  <main class="app-shell upload-shell">
+    <div class="upload-page-heading">
+      <div>
+        <div class="breadcrumb"><a href="index.html#overview">WORKSPACE</a><svg class="icon tiny"><use href="#i-chevron-right"/></svg><span>DOCUMENT UPLOAD</span></div>
+        <span class="upload-eyebrow">ADD TO YOUR WORKSPACE</span>
+        <h1>Upload documentation</h1>
+        <p class="page-subtitle">Choose a document to prepare it for a documentation drift review.</p>
+      </div>
+      <span class="demo-pill"><span></span> DEMO MODE</span>
+    </div>
+
+    <div class="upload-layout">
+      <section class="panel standalone-upload-panel" aria-labelledby="documentUploadTitle">
+        <div class="panel-header upload-header">
+          <div class="panel-title-block">
+            <div class="panel-heading-line"><span class="upload-heading-icon"><svg class="icon"><use href="#i-upload"/></svg></span><h2 id="documentUploadTitle">Choose a document</h2></div>
+            <p>Drop a file below or browse your device.</p>
+          </div>
+          <span class="upload-demo-tag">LOCAL DEMO</span>
+        </div>
+        <div class="upload-content">
+          <button class="upload-dropzone" id="uploadDropzone" type="button" aria-describedby="uploadRequirements">
+            <span class="dropzone-icon"><svg class="icon"><use href="#i-upload"/></svg></span>
+            <span class="dropzone-title">Drag and drop your document here</span>
+            <span class="dropzone-browse">or <span>browse files</span> from your computer</span>
+            <span class="dropzone-requirements" id="uploadRequirements">PDF, DOC, DOCX, Markdown, or TXT · Up to 20 MB</span>
+          </button>
+          <input id="documentInput" class="sr-only" type="file" accept=".pdf,.doc,.docx,.md,.txt" tabindex="-1" aria-label="Choose a document">
+          <p class="upload-error" id="uploadError" role="alert" hidden></p>
+          <div class="upload-file-card" id="uploadFileCard" hidden>
+            <span class="upload-file-icon" id="uploadFileIcon" aria-hidden="true"></span>
+            <div class="upload-file-info">
+              <strong class="upload-file-name" id="uploadFileName"></strong>
+              <span class="upload-file-meta" id="uploadFileMeta"></span>
+              <div class="upload-progress-track" id="uploadProgressTrack" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Ready to upload">
+                <span id="uploadProgressFill"></span>
+              </div>
+              <span class="upload-status" id="uploadStatus" role="status" aria-live="polite">Ready to upload</span>
+            </div>
+            <div class="upload-file-actions">
+              <button class="upload-action" id="replaceDocument" type="button">Replace</button>
+              <button class="upload-remove" id="removeDocument" type="button" aria-label="Remove selected document"><svg class="icon tiny"><use href="#i-close"/></svg></button>
+            </div>
+          </div>
+          <div class="upload-footer">
+            <span class="upload-demo-note">Demo only · Nothing is sent to a server.</span>
+            <button class="button button-primary upload-submit" id="uploadButton" type="button" disabled><svg class="icon"><use href="#i-upload"/></svg><span>Prepare document</span></button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="upload-guidance">
+        <section class="panel upload-guide-card">
+          <span class="upload-guide-icon"><svg class="icon"><use href="#i-file"/></svg></span>
+          <h2>Supported files</h2>
+          <p>Upload one document at a time. The demo accepts these formats:</p>
+          <div class="format-list"><span>PDF</span><span>DOC / DOCX</span><span>Markdown</span><span>TXT</span></div>
+          <div class="upload-limit"><strong>20 MB</strong><span>maximum file size</span></div>
+        </section>
+        <section class="upload-privacy-note">
+          <span class="privacy-check"><svg class="icon"><use href="#i-check"/></svg></span>
+          <div><strong>Private demo</strong><p>File selection and progress are simulated in this browser. No document is uploaded or stored.</p></div>
+        </section>
+        <a class="upload-results-link" href="analysis-results.html"><span>Have a document ready?</span><strong>Review sample analysis results <svg class="icon tiny"><use href="#i-chevron-right"/></svg></strong></a>
+      </aside>
+    </div>
+
+    <footer class="page-footer"><span><span class="footer-mark">◈</span> TRACE LENS <span class="footer-separator">/</span> <span>Documentation that stays in sync.</span></span><span>DEMO ENVIRONMENT · No live repository data</span></footer>
+  </main>
+
+  <div class="toast" id="uploadToast" role="status" aria-live="polite"><span class="toast-check"><svg class="icon tiny"><use href="#i-check"/></svg></span><span id="uploadToastMessage">Document prepared</span></div>
+  <script src="document-upload.js"></script>
+</body>
+</html>
