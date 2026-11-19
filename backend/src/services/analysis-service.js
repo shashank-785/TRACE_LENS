@@ -122,7 +122,8 @@ function verifyAiFinding(candidate, index, changedFiles, documents) {
   const severity = normalizeSeverity(candidate.severity);
 
   if (!codeFile || !documentation || codeEvidence.length < 5 || docsEvidence.length < 5 ||
-      !codeFile.patch.includes(codeEvidence) || !documentation.content.includes(docsEvidence) ||
+      typeof codeFile.patch !== "string" || !hasChangedCodeEvidence(codeFile.patch, codeEvidence) ||
+      !documentation.content.includes(docsEvidence) ||
       !title || !context || !suggestion || !severity) {
     return null;
   }
@@ -144,6 +145,14 @@ function verifyAiFinding(candidate, index, changedFiles, documents) {
     docsEvidence,
     source: "bharatcode"
   };
+}
+
+function hasChangedCodeEvidence(patch, evidence) {
+  return patch.split(/\r?\n/).some((line) => {
+    const isAddedLine = line.startsWith("+") && !line.startsWith("+++");
+    const isRemovedLine = line.startsWith("-") && !line.startsWith("---");
+    return (isAddedLine || isRemovedLine) && line.slice(1).includes(evidence);
+  });
 }
 
 function safeText(value, maxLength) {
