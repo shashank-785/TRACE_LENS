@@ -78,6 +78,136 @@ test("rule analysis detects zero-valued defaults and compares boolean values", (
   );
 });
 
+test("rule analysis matches instance-qualified timeout changes to documentation", () => {
+  const timeoutChange = [{
+    filename: "src/client.ts",
+    patch: "@@ -13,7 +13,7 @@\n-    this.timeoutMs = options.timeoutMs ?? 10_000;\n+    this.timeoutMs = options.timeoutMs ?? 12_000;"
+  }];
+  const timeoutDocs = [{
+    path: "docs/configuration.md",
+    content: "| `timeoutMs` | number | `10000` | Request timeout in milliseconds. |"
+  }];
+  const findings = analyzeWithRules(timeoutChange, timeoutDocs);
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].codeEvidence, "this.timeoutMs = options.timeoutMs ?? 12_000;");
+  assert.equal(findings[0].docsEvidence, timeoutDocs[0].content);
+  assert.deepEqual(
+    analyzeWithRules(timeoutChange, [{
+      path: "docs/configuration.md",
+      content: "Connection timeout is 5000 ms; upload timeout is 6000 ms."
+    }]),
+    []
+  );
+  assert.deepEqual(
+    analyzeWithRules(timeoutChange, [{
+      path: "docs/configuration.md",
+      content: "| `timeoutMs` | number | `12000` | Request timeout in milliseconds. |"
+    }]),
+    []
+  );
+});
+
+test("rule analysis detects changed supported ranges against documented ranges", () => {
+  const rangeChange = [{
+    filename: "src/client.ts",
+    patch: "@@ -18,7 +18,7 @@\n-    if (days < 1 || days > 7) throw new RangeError(\"days must be between 1 and 7\");\n+    if (days < 1 || days > 14) throw new RangeError(\"days must be between 1 and 14\");"
+  }];
+  const rangeDocs = [{
+    path: "docs/forecasts.md",
+    content: "- `days`: number of days, from 1 to 7. Defaults to 3."
+  }];
+  const findings = analyzeWithRules(rangeChange, rangeDocs);
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].codeEvidence, "if (days < 1 || days > 14) throw new RangeError(\"days must be between 1 and 14\");");
+  assert.equal(findings[0].docsEvidence, rangeDocs[0].content);
+  assert.deepEqual(
+    analyzeWithRules(rangeChange, [{
+      path: "docs/forecasts.md",
+      content: "- `days`: number of days, from 1 to 14. Defaults to 3."
+    }]),
+    []
+  );
+  assert.deepEqual(
+    analyzeWithRules([{
+      filename: "src/client.ts",
+      patch: "@@ -18 +18 @@\n+    if (days < 1 || days > 14) console.warn(\"unsupported range\");"
+    }], rangeDocs),
+    []
+  );
+  assert.deepEqual(
+    analyzeWithRules(rangeChange, [{
+      path: "docs/forecasts.md",
+      content: "Forecast days default to 3; retries range from 2 to 3."
+    }]),
+    []
+  );
+  assert.deepEqual(
+    analyzeWithRules(rangeChange, [{
+      path: "docs/forecasts.md",
+      content: "Forecast days default to 3, retries range from 2 to 3."
+    }]),
+    []
+  );
+  assert.equal(analyzeWithRules([{
+    filename: "src/client.ts",
+    patch: "@@ -18 +18 @@\n+    if (days > 14 || days < 1) throw new RangeError(\"out of range\");"
+  }], rangeDocs).length, 1);
+  assert.deepEqual(
+    analyzeWithRules(rangeChange, [{
+      path: "docs/forecasts.md",
+      content: "Forecast days range from 1 to 7; retries range from 2 to 3."
+    }]).map((finding) => finding.docsEvidence),
+    ["Forecast days range from 1 to 7; retries range from 2 to 3."]
+  );
+  assert.deepEqual(
+    analyzeWithRules(rangeChange, [{
+      path: "docs/forecasts.md",
+      content: "Forecast days range from 1 to 7 and retries range from 2 to 3."
+    }]),
+    []
+  );
+});
+
+test("rule analysis matches negative and decimal documentation ranges", () => {
+  const negativeChange = [{
+    filename: "src/client.ts",
+    patch: "@@ -1 +1 @@\n-    if (temperature < -10 || temperature > -2) throw new RangeError(\"out of range\");\n+    if (temperature < -10 || temperature > -1) throw new RangeError(\"out of range\");"
+  }];
+  assert.deepEqual(
+    analyzeWithRules(negativeChange, [{
+      path: "docs/temperature.md",
+      content: "Temperature range: -10 to -1."
+    }]),
+    []
+  );
+  const negativeMismatch = analyzeWithRules(negativeChange, [{
+    path: "docs/temperature.md",
+    content: "Temperature range: -10 to -2."
+  }]);
+  assert.equal(negativeMismatch.length, 1);
+  assert.equal(negativeMismatch[0].docsEvidence, "Temperature range: -10 to -2.");
+
+  const decimalChange = [{
+    filename: "src/client.ts",
+    patch: "@@ -1 +1 @@\n-    if (days < 0.5 || days > 1.5) throw new RangeError(\"out of range\");\n+    if (days < 0.5 || days > 2.5) throw new RangeError(\"out of range\");"
+  }];
+  assert.deepEqual(
+    analyzeWithRules(decimalChange, [{
+      path: "docs/forecasts.md",
+      content: "Days range from 0.5 to 2.5."
+    }]),
+    []
+  );
+  const decimalMismatch = analyzeWithRules(decimalChange, [{
+    path: "docs/forecasts.md",
+    content: "Days range from 0.5 to 3.5."
+  }]);
+  assert.equal(decimalMismatch.length, 1);
+  assert.equal(decimalMismatch[0].docsEvidence, "Days range from 0.5 to 3.5.");
+});
+
 test("rule analysis notes a newly exported symbol absent from the fetched docs", () => {
   const findings = analyzeWithRules(
     [{ filename: "src/api/invoices.js", patch: "@@ -0,0 +1 @@\n+export function createInvoice(input) {" }],
