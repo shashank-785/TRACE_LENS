@@ -71,6 +71,19 @@ test("rule analysis ignores object and expression assignments that merely contai
   assert.deepEqual(analyzeWithRules(nonScalarChanges, docs), []);
 });
 
+test("rule analysis ignores test fixtures when comparing runtime settings", () => {
+  const testChanges = [
+    { filename: "backend/test/backend.test.js", patch: "@@ -1 +1 @@\n+requestTimeoutMs: 50," },
+    { filename: "src/config.spec.ts", patch: "@@ -1 +1 @@\n+requestTimeoutMs = 25000;" }
+  ];
+  const docs = [{
+    path: "docs/API.md",
+    content: "The request timeout is 60 seconds by default."
+  }];
+
+  assert.deepEqual(analyzeWithRules(testChanges, docs), []);
+});
+
 test("rule analysis detects zero-valued defaults and compares boolean values", () => {
   const zeroChangedFiles = [{
     filename: "src/config/retries.js",

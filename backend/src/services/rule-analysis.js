@@ -15,7 +15,7 @@ function analyzeWithRules(changedFiles, documents) {
   let nextId = 1;
 
   for (const file of changedFiles) {
-    if (!file.patch) continue;
+    if (!file.patch || isTestFile(file.filename)) continue;
     for (const addedLine of file.patch.split(/\r?\n/).filter((line) => line.startsWith("+") && !line.startsWith("+++"))) {
       const codeLine = addedLine.slice(1).trim();
       const codeRange = parseRangeGuard(codeLine);
@@ -94,7 +94,7 @@ function analyzeWithRules(changedFiles, documents) {
 
     for (const addedLine of file.patch.split(/\r?\n/)) {
       const match = addedLine.match(EXPORTED_SYMBOL_PATTERN);
-      if (!match || !documents.length || /\.(?:test|spec)\.[^.]+$/i.test(file.filename)) continue;
+      if (!match || !documents.length) continue;
       const symbol = match[1];
       if (documents.some((document) => new RegExp(`\\b${escapeRegExp(symbol)}\\b`, "i").test(document.content))) continue;
       if (findings.some((finding) => finding.codeFile === file.filename && finding.codeEvidence === addedLine.slice(1).trim())) continue;
@@ -123,6 +123,11 @@ function analyzeWithRules(changedFiles, documents) {
   }
 
   return findings;
+}
+
+function isTestFile(filename) {
+  const normalized = filename.replace(/\\/g, "/");
+  return /(?:^|\/)(?:__tests__|tests?|specs?)(?:\/|$)|\.(?:test|spec)\.[^.]+$/i.test(normalized);
 }
 
 function parseAssignment(line) {
