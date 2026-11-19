@@ -30,16 +30,20 @@ Set these in the root `.env` for local development or in the Render service sett
 | --- | --- | --- |
 | `PORT` | No | HTTP port; defaults to `3000`. Render can supply this automatically. |
 | `GITHUB_TOKEN` | No | Optional server-side token for GitHub REST API rate limits. Public repositories work without it. |
+| `AI_PROVIDER` | No | Select `nvidia-nim`, `bharatcode`, or `openai-compatible`. If unset, configured NVIDIA NIM values take precedence, followed by generic settings and then legacy BharatCode. |
+| `NVIDIA_NIM_API_KEY` | For NVIDIA NIM | NVIDIA API key, read only by the backend. |
+| `NVIDIA_NIM_BASE_URL` | No | NVIDIA NIM OpenAI-compatible base URL; defaults to `https://integrate.api.nvidia.com/v1`. |
+| `NVIDIA_NIM_MODEL` | For NVIDIA NIM | NVIDIA-served model ID. The official NVIDIA catalog's Chat Completions example uses `nvidia/llama-3.1-nemotron-70b-instruct` ([model page](https://build.nvidia.com/nvidia/llama-3_1-nemotron-70b-instruct)). Availability may depend on the NVIDIA endpoint/account. |
 | `AI_API_KEY` | No | Server-side API key. Required with `AI_BASE_URL` and `AI_MODEL`; otherwise rule-based analysis is used. |
 | `AI_BASE_URL` | No | HTTPS base URL for an OpenAI-compatible Chat Completions API. The provider endpoint is never called unless the key, base URL, and model are all configured. |
 | `AI_MODEL` | No | Model identifier supported by the configured provider. Required with `AI_API_KEY` and `AI_BASE_URL`. |
 | `CORS_ORIGIN` | No | Comma-separated exact browser origins allowed to call the API; defaults to local frontend preview origins. |
 
-Copy `.env.example` to `.env` if it does not already exist. Configure `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` using values from your provider. TRACE LENS uses the OpenAI-compatible Chat Completions request format; providers with a different API format are not supported by this adapter. The base URL must use HTTPS. The legacy `BHARATCODE_API_KEY`, `BHARATCODE_BASE_URL`, and `BHARATCODE_MODEL` variables remain supported when no generic `AI_*` value is configured; the legacy URL defaults to `https://bharatcode.ai/api/model/v1`. `.env` is ignored by Git. Never place credentials in frontend files or commit `.env`.
+Copy `.env.example` to `.env` if it does not already exist. For NVIDIA, set `AI_PROVIDER=nvidia-nim`, `NVIDIA_NIM_API_KEY`, and `NVIDIA_NIM_MODEL`; the base URL defaults to NVIDIA's documented `https://integrate.api.nvidia.com/v1` and can be overridden. NVIDIA NIM uses the OpenAI-compatible `POST /chat/completions` request format. To select the legacy integration, set `AI_PROVIDER=bharatcode`; for another compatible service, set `AI_PROVIDER=openai-compatible` and configure the `AI_*` values. If the provider is not configured or a request fails, TRACE LENS continues with rule-based analysis. `.env` is ignored by Git. Never place credentials in frontend files or commit `.env`.
 
 AI analysis is opt-in in the UI. When enabled, the selected public pull request diff and fetched documentation are sent to the configured provider. `/api/health` reports whether settings are complete; it does not test provider connectivity. An AI result is reported as used only after a successful, complete response has been parsed and its evidence verified.
 
-On Render, add `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` in the web service's **Environment** settings to enable AI. Keep the key in Render's environment settings; do not add it to `render.yaml`. AI is optional and does not block rule-based analysis or deployment.
+On Render, set `AI_PROVIDER=nvidia-nim`, `NVIDIA_NIM_API_KEY`, and `NVIDIA_NIM_MODEL` in the web service's **Environment** settings to use NVIDIA NIM. `NVIDIA_NIM_BASE_URL` is optional and defaults to NVIDIA's API URL. Keep the API key only in Render's secret environment setting; do not add it to `render.yaml`. AI is optional and does not block rule-based analysis or deployment.
 
 ## API
 
@@ -82,6 +86,6 @@ The included `render.yaml` configures the service. If setting it up manually, le
 2. **Start Command:** `npm --prefix backend start`
 3. **Health Check Path:** `/api/health`
 
-The service uses Render's `PORT` automatically and can start without API credentials. Public repository analysis uses GitHub's unauthenticated API by default; add an optional `GITHUB_TOKEN` only through Render's environment settings if needed for rate limits. Set `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` only if AI analysis is intentionally enabled. Because the frontend and API share an origin, a separate static site and production API URL are not needed.
+The service uses Render's `PORT` automatically and can start without API credentials. Public repository analysis uses GitHub's unauthenticated API by default; add an optional `GITHUB_TOKEN` only through Render's environment settings if needed for rate limits. Configure one AI provider only if AI analysis is intentionally enabled. Because the frontend and API share an origin, a separate static site and production API URL are not needed.
 
 Render's free web services may spin down after inactivity, causing a delay on the first request. Analysis results are in memory and disappear when the service restarts.

@@ -157,6 +157,7 @@ async function checkBackendHealth() {
     backendStatus.classList.add("online");
     useAIProviderCheckbox.disabled = !health.ai.configured;
     const provider = health.ai.provider || "AI provider";
+    useAIProviderCheckbox.nextElementSibling.textContent = `Use ${provider} (optional)`;
     if (health.ai.configurationError) {
       setWorkflowStatus(`${provider} configuration issue: ${health.ai.configurationError} Rule-based analysis will be used.`);
     } else if (health.ai.configured) {
@@ -286,7 +287,12 @@ async function analyzePullRequest(request) {
     const warnings = Array.isArray(result.warnings) ? result.warnings : [];
     const provider = result.provider || "rules";
     const summary = `Analysis complete for ${result.repository}#${request.pullNumber}: ${findings.length} verified finding(s) using ${provider}.`;
-    setWorkflowStatus([summary, ...warnings].join(" "), "success");
+    const aiStatus = result.ai?.used
+      ? `${result.ai.provider || "AI provider"} analysis was used; returned findings passed evidence verification.`
+      : request.useAi
+        ? "AI was not used; this result came from rule-based fallback."
+        : "AI was not requested; this result is rule-based.";
+    setWorkflowStatus([summary, aiStatus, ...warnings].join(" "), "success");
   } catch (error) {
     clearDisplayedResults();
     loadingState.hidden = true;

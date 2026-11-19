@@ -1,35 +1,85 @@
 "use strict";
 
 const DEFAULT_BHARATCODE_BASE_URL = "https://bharatcode.ai/api/model/v1";
+const DEFAULT_NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1";
+const SUPPORTED_NVIDIA_NIM_MODEL = "nvidia/llama-3.1-nemotron-70b-instruct";
+
+const PROVIDERS = Object.freeze({
+  "nvidia-nim": {
+    name: "NVIDIA NIM",
+    apiKey: "NVIDIA_NIM_API_KEY",
+    baseURL: "NVIDIA_NIM_BASE_URL",
+    model: "NVIDIA_NIM_MODEL",
+    defaultBaseURL: DEFAULT_NVIDIA_NIM_BASE_URL
+  },
+  bharatcode: {
+    name: "BharatCode",
+    apiKey: "BHARATCODE_API_KEY",
+    baseURL: "BHARATCODE_BASE_URL",
+    model: "BHARATCODE_MODEL",
+    defaultBaseURL: DEFAULT_BHARATCODE_BASE_URL
+  },
+  "openai-compatible": {
+    name: "OpenAI-compatible provider",
+    apiKey: "AI_API_KEY",
+    baseURL: "AI_BASE_URL",
+    model: "AI_MODEL",
+    defaultBaseURL: ""
+  }
+});
 
 function loadAIProviderSettings(env = process.env) {
-  const genericKeys = ["AI_API_KEY", "AI_BASE_URL", "AI_MODEL"];
-  const legacyKeys = ["BHARATCODE_API_KEY", "BHARATCODE_BASE_URL", "BHARATCODE_MODEL"];
-  const genericConfigured = hasSettings(env, genericKeys);
-  const useLegacySettings = !genericConfigured && hasSettings(env, legacyKeys);
-  const keyNames = useLegacySettings
-    ? { apiKey: "BHARATCODE_API_KEY", baseURL: "BHARATCODE_BASE_URL", model: "BHARATCODE_MODEL" }
-    : { apiKey: "AI_API_KEY", baseURL: "AI_BASE_URL", model: "AI_MODEL" };
-  const apiKey = readSetting(env, keyNames.apiKey);
-  const model = readSetting(env, keyNames.model);
-  const configuredBaseURL = readSetting(env, keyNames.baseURL);
-  const baseURL = configuredBaseURL || (useLegacySettings ? DEFAULT_BHARATCODE_BASE_URL : "");
-  const configurationError = baseURL ? validateBaseURL(baseURL, keyNames.baseURL) : "";
+  const providerId = resolveProvider(env);
+  const provider = PROVIDERS[providerId];
+  if (!provider) {
+    return Object.freeze({
+      apiKey: "",
+      baseURL: "",
+      model: "",
+      providerName: "Unsupported AI provider",
+      timeoutMs: 20000,
+      configurationError: "AI_PROVIDER must be nvidia-nim, bharatcode, or openai-compatible.",
+      missingSettings: Object.freeze([]),
+      useLegacySettings: false
+    });
+  }
+
+  const apiKey = readSetting(env, provider.apiKey);
+  const model = readSetting(env, provider.model);
+  const configuredBaseURL = readSetting(env, provider.baseURL);
+  const baseURL = configuredBaseURL || provider.defaultBaseURL;
+  const configurationError = baseURL ? validateBaseURL(baseURL, provider.baseURL) : "";
   const missingSettings = [];
-  if (!apiKey) missingSettings.push(keyNames.apiKey);
-  if (!baseURL) missingSettings.push(keyNames.baseURL);
-  if (!model) missingSettings.push(keyNames.model);
+  if (!apiKey) missingSettings.push(provider.apiKey);
+  if (!baseURL) missingSettings.push(provider.baseURL);
+  if (!model) missingSettings.push(provider.model);
 
   return Object.freeze({
     apiKey,
     baseURL,
     model,
-    providerName: useLegacySettings ? "BharatCode" : "OpenAI-compatible provider",
+    providerName: provider.name,
     timeoutMs: 20000,
     configurationError,
     missingSettings: Object.freeze(missingSettings),
-    useLegacySettings
+    useLegacySettings: providerId === "bharatcode"
   });
+}
+
+function resolveProvider(env) {
+  const selected = readSetting(env, "AI_PROVIDER").toLowerCase();
+  if (selected) return selected;
+
+  if (hasSettings(env, ["NVIDIA_NIM_API_KEY", "NVIDIA_NIM_BASE_URL", "NVIDIA_NIM_MODEL"])) {
+    return "nvidia-nim";
+  }
+  if (hasSettings(env, ["AI_API_KEY", "AI_BASE_URL", "AI_MODEL"])) {
+    return "openai-compatible";
+  }
+  if (hasSettings(env, ["BHARATCODE_API_KEY", "BHARATCODE_BASE_URL", "BHARATCODE_MODEL"])) {
+    return "bharatcode";
+  }
+  return "openai-compatible";
 }
 
 function hasSettings(env, keys) {
@@ -55,4 +105,9 @@ function validateBaseURL(baseURL, settingName) {
   return "";
 }
 
-module.exports = { DEFAULT_BHARATCODE_BASE_URL, loadAIProviderSettings };
+module.exports = {
+  DEFAULT_BHARATCODE_BASE_URL,
+  DEFAULT_NVIDIA_NIM_BASE_URL,
+  SUPPORTED_NVIDIA_NIM_MODEL,
+  loadAIProviderSettings
+};

@@ -5,7 +5,12 @@ const { once } = require("node:events");
 const test = require("node:test");
 const OpenAI = require("openai");
 const { createApp } = require("../src/app");
-const { DEFAULT_BHARATCODE_BASE_URL, loadAIProviderSettings } = require("../src/config/ai-provider");
+const {
+  DEFAULT_BHARATCODE_BASE_URL,
+  DEFAULT_NVIDIA_NIM_BASE_URL,
+  SUPPORTED_NVIDIA_NIM_MODEL,
+  loadAIProviderSettings
+} = require("../src/config/ai-provider");
 const { AnalysisService, verifyAiFinding } = require("../src/services/analysis-service");
 const { OpenAICompatibleService } = require("../src/services/openai-compatible-service");
 const { GitHubService } = require("../src/services/github-service");
@@ -267,11 +272,15 @@ test("OpenAI-compatible provider rejects malformed and truncated model responses
   ];
 
   for (const response of responses) {
-    const ai = new OpenAICompatibleService({
-      apiKey: "test-key-not-sent",
-      baseURL: DEFAULT_BHARATCODE_BASE_URL,
-      model: "configured-test-model"
-    }, createMockOpenAIClient(async () => mockChatCompletionResponse(response.content, response.finishReason)));
+    const settings = loadAIProviderSettings({
+      AI_PROVIDER: "nvidia-nim",
+      NVIDIA_NIM_API_KEY: "test-key-not-sent",
+      NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+    });
+    const ai = new OpenAICompatibleService(settings, createMockOpenAIClient(
+      async () => mockChatCompletionResponse(response.content, response.finishReason),
+      { baseURL: settings.baseURL }
+    ));
 
     await assert.rejects(ai.analyze({
       pullRequest: { number: 2, title: "Test change", body: "" },
@@ -279,6 +288,97 @@ test("OpenAI-compatible provider rejects malformed and truncated model responses
       documents
     }), (error) => error.code === response.expected);
   }
+});
+
+test("NVIDIA NIM sends mocked Chat Completions to the documented model endpoint", async () => {
+  const settings = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    NVIDIA_NIM_BASE_URL: DEFAULT_NVIDIA_NIM_BASE_URL,
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+  });
+  let request;
+  const service = new OpenAICompatibleService(settings, createMockOpenAIClient(async (url, options) => {
+    request = {
+      url: String(url),
+      authorization: new Headers(options.headers).get("authorization"),
+      body: JSON.parse(options.body)
+    };
+    return mockChatCompletionResponse("{\"findings\":[]}");
+  }, { baseURL: settings.baseURL }));
+
+  assert.equal(settings.providerName, "NVIDIA NIM");
+  assert.equal(service.configured, true);
+  assert.deepEqual(await service.analyze({
+    pullRequest: { number: 8, title: "Update timeout", body: "" },
+    changedFiles,
+    documents
+  }), []);
+  assert.equal(request.url, `${DEFAULT_NVIDIA_NIM_BASE_URL}/chat/completions`);
+  assert.equal(request.authorization, "Bearer test-key-not-sent");
+  assert.equal(request.body.model, SUPPORTED_NVIDIA_NIM_MODEL);
+  assert.equal(JSON.stringify(request.body).includes("test-key-not-sent"), false);
+});
+
+test("NVIDIA NIM reports a missing key or model without making a request", async () => {
+  const missingKey = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+  });
+  assert.equal(missingKey.providerName, "NVIDIA NIM");
+  assert.equal(missingKey.baseURL, DEFAULT_NVIDIA_NIM_BASE_URL);
+  assert.deepEqual(missingKey.missingSettings, ["NVIDIA_NIM_API_KEY"]);
+  const missingKeyService = new OpenAICompatibleService(missingKey);
+  assert.equal(missingKeyService.configured, false);
+  await assert.rejects(missingKeyService.analyze({
+    pullRequest: { number: 8, title: "Update timeout", body: "" },
+    changedFiles,
+    documents
+  }), (error) => error.code === "AI_PROVIDER_NOT_CONFIGURED");
+
+  const missingModel = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent"
+  });
+  assert.deepEqual(missingModel.missingSettings, ["NVIDIA_NIM_MODEL"]);
+  assert.equal(new OpenAICompatibleService(missingModel).configured, false);
+
+  const autoSelected = loadAIProviderSettings({
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL,
+    BHARATCODE_API_KEY: "legacy-test-key",
+    BHARATCODE_MODEL: "legacy-model"
+  });
+  assert.equal(autoSelected.providerName, "NVIDIA NIM");
+  const explicitlyLegacy = loadAIProviderSettings({
+    AI_PROVIDER: "bharatcode",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    BHARATCODE_API_KEY: "legacy-test-key",
+    BHARATCODE_MODEL: "legacy-model"
+  });
+  assert.equal(explicitlyLegacy.providerName, "BharatCode");
+});
+
+test("BharatCode remains selectable and sends mocked requests to its existing endpoint", async () => {
+  const settings = loadAIProviderSettings({
+    AI_PROVIDER: "bharatcode",
+    BHARATCODE_API_KEY: "test-key-not-sent",
+    BHARATCODE_MODEL: "legacy-test-model"
+  });
+  let requestURL;
+  const service = new OpenAICompatibleService(settings, createMockOpenAIClient(async (url) => {
+    requestURL = String(url);
+    return mockChatCompletionResponse("{\"findings\":[]}");
+  }, { baseURL: settings.baseURL }));
+
+  assert.equal(settings.providerName, "BharatCode");
+  assert.equal(service.model, "legacy-test-model");
+  assert.deepEqual(await service.analyze({
+    pullRequest: { number: 8, title: "Update timeout", body: "" },
+    changedFiles,
+    documents
+  }), []);
+  assert.equal(requestURL, `${DEFAULT_BHARATCODE_BASE_URL}/chat/completions`);
 });
 
 test("generic AI settings validate all required provider values and preserve BharatCode aliases", async () => {
@@ -302,6 +402,7 @@ test("generic AI settings validate all required provider values and preserve Bha
   })).configured, false);
 
   const configured = loadAIProviderSettings({
+    AI_PROVIDER: "openai-compatible",
     AI_API_KEY: "test-key-not-sent",
     AI_BASE_URL: "https://provider.example.test/v1",
     AI_MODEL: "configured-test-model"
@@ -341,6 +442,7 @@ test("generic AI settings validate all required provider values and preserve Bha
   }), (error) => error.code === "AI_PROVIDER_INVALID_CONFIGURATION");
 
   assert.match(loadAIProviderSettings({ AI_BASE_URL: "not a URL" }).configurationError, /valid HTTPS URL/);
+  assert.match(loadAIProviderSettings({ AI_PROVIDER: "not-supported" }).configurationError, /AI_PROVIDER must be/);
 });
 
 test("OpenAI-compatible provider maps authentication, model, rate-limit, busy, and timeout errors", async () => {
@@ -353,17 +455,20 @@ test("OpenAI-compatible provider maps authentication, model, rate-limit, busy, a
   ];
 
   for (const failure of failures) {
-    const ai = new OpenAICompatibleService({
-      apiKey: "test-key-not-sent",
-      baseURL: DEFAULT_BHARATCODE_BASE_URL,
-      model: "configured-test-model"
-    }, createMockOpenAIClient(async () => new Response(JSON.stringify({
+    const settings = loadAIProviderSettings({
+      AI_PROVIDER: "nvidia-nim",
+      NVIDIA_NIM_API_KEY: "test-key-not-sent",
+      NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+    });
+    const ai = new OpenAICompatibleService(settings, createMockOpenAIClient(async () => new Response(JSON.stringify({
       error: {
         message: "provider detail must not be surfaced",
         type: "provider_error",
         code: failure.code
       }
-    }), { status: failure.status, headers: { "content-type": "application/json" } })));
+    }), { status: failure.status, headers: { "content-type": "application/json" } }), {
+      baseURL: settings.baseURL
+    }));
 
     await assert.rejects(ai.analyze({
       pullRequest: { number: 2, title: "Test change", body: "" },
@@ -376,15 +481,18 @@ test("OpenAI-compatible provider maps authentication, model, rate-limit, busy, a
     });
   }
 
+  const timeoutSettings = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+  });
   const timeoutService = new OpenAICompatibleService({
-    apiKey: "test-key-not-sent",
-    baseURL: DEFAULT_BHARATCODE_BASE_URL,
-    model: "configured-test-model",
+    ...timeoutSettings,
     timeoutMs: 5
   }, createMockOpenAIClient((_url, { signal }) => new Promise((_resolve, reject) => {
     if (signal.aborted) return reject(signal.reason);
     signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-  }), { timeout: 5 }));
+  }), { timeout: 5, baseURL: timeoutSettings.baseURL }));
 
   await assert.rejects(timeoutService.analyze({
     pullRequest: { number: 2, title: "Test change", body: "" },
@@ -511,13 +619,13 @@ test("analysis discards unverified AI findings and keeps verified results", asyn
     githubService,
     aiService: {
       configured: true,
-      providerName: "Example Provider",
+      providerName: "NVIDIA NIM",
       analyze: async () => [validAiFinding, { ...validAiFinding, codeEvidence: "invented code" }]
     }
   });
   const result = await analysis.analyzePullRequest({ owner: "acme", repo: "payments", pullNumber: 8, useAi: true });
 
-  assert.equal(result.provider, "Example Provider + rules");
+  assert.equal(result.provider, "NVIDIA NIM + rules");
   assert.ok(result.findings.some((finding) => finding.source === "ai"));
   assert.equal(result.findings.find((finding) => finding.source === "ai").confidence, "Medium");
   assert.ok(result.warnings.some((warning) => warning.includes("discarded")));
@@ -525,17 +633,20 @@ test("analysis discards unverified AI findings and keeps verified results", asyn
 });
 
 test("analysis falls back to rules after a provider request failure", async () => {
-  const aiService = new OpenAICompatibleService({
-    apiKey: "test-key-not-sent",
-    baseURL: DEFAULT_BHARATCODE_BASE_URL,
-    model: "configured-test-model"
-  }, createMockOpenAIClient(async () => new Response(JSON.stringify({
+  const settings = loadAIProviderSettings({
+    AI_PROVIDER: "nvidia-nim",
+    NVIDIA_NIM_API_KEY: "test-key-not-sent",
+    NVIDIA_NIM_MODEL: SUPPORTED_NVIDIA_NIM_MODEL
+  });
+  const aiService = new OpenAICompatibleService(settings, createMockOpenAIClient(async () => new Response(JSON.stringify({
     error: {
       message: "provider response must not be exposed",
       type: "server_error",
       code: "provider_error"
       }
-  }), { status: 500, headers: { "content-type": "application/json" } })));
+  }), { status: 500, headers: { "content-type": "application/json" } }), {
+    baseURL: settings.baseURL
+  }));
   const analysis = new AnalysisService({
     githubService: createMockGitHubService(),
     aiService
@@ -746,6 +857,13 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     const frontend = await fetch(`${address}/analysis-results.html`);
     assert.equal(frontend.status, 200);
     assert.match(await frontend.text(), /Analyze a GitHub pull request/);
+
+    const frontendScript = await fetch(`${address}/analysis-results.js`);
+    assert.equal(frontendScript.status, 200);
+    const frontendSource = await frontendScript.text();
+    assert.match(frontendSource, /health\.ai\.provider/);
+    assert.match(frontendSource, /analysis was used/);
+    assert.match(frontendSource, /rule-based fallback/);
 
     const missingPage = await fetch(`${address}/backend/src/config/env.js`);
     assert.equal(missingPage.status, 404);
