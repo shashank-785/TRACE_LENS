@@ -2,6 +2,12 @@
 
 const ASSIGNMENT_PATTERN = /^(?:export\s+)?(?:(?:const|let|var)\s+)?["'`]?([A-Za-z_$][\w$.-]*)["'`]?\s*(?::|=)\s*(.+)$/;
 const EXPORTED_SYMBOL_PATTERN = /^\s*\+\s*export\s+(?:(?:default|async)\s+)*(?:function|class|const|let|var|interface|type)\s+([A-Za-z_$][\w$]*)/;
+const NUMBER_PATTERN = "[-+]?\\d(?:_?\\d)*(?:\\.\\d+)?";
+const RANGE_GUARD_PATTERN = new RegExp(`^([A-Za-z_$][\\w$.]*)\\s*([<>])\\s*(${NUMBER_PATTERN})$`);
+const DOCUMENTED_RANGE_PATTERN = new RegExp(
+  `\\bbetween\\s+(${NUMBER_PATTERN})\\s+and\\s+(${NUMBER_PATTERN})|\\bfrom\\s+(${NUMBER_PATTERN})\\s+(?:to|through)\\s+(${NUMBER_PATTERN})|(?<![\\w.+-])(${NUMBER_PATTERN})\\s*(?:to|through|[-–—])\\s*(${NUMBER_PATTERN})(?![\\w]|\\.\\d)`,
+  "gi"
+);
 
 function analyzeWithRules(changedFiles, documents) {
   const findings = [];
@@ -12,6 +18,39 @@ function analyzeWithRules(changedFiles, documents) {
     if (!file.patch) continue;
     for (const addedLine of file.patch.split(/\r?\n/).filter((line) => line.startsWith("+") && !line.startsWith("+++"))) {
       const codeLine = addedLine.slice(1).trim();
+      const codeRange = parseRangeGuard(codeLine);
+      if (codeRange) {
+        const keyTerms = keyWords(codeRange.key);
+        for (const document of documents) {
+          for (const docLine of document.content.split(/\r?\n/)) {
+            const documentedRange = extractDocumentedRange(docLine, keyTerms, codeRange.key);
+            if (!documentedRange ||
+                documentedRange.min === codeRange.min && documentedRange.max === codeRange.max) continue;
+
+            const fingerprint = `${file.filename}|${document.path}|${codeRange.key}|${docLine.trim()}`;
+            if (seen.has(fingerprint)) continue;
+            seen.add(fingerprint);
+            findings.push({
+              id: `RULE-${String(nextId++).padStart(3, "0")}`,
+              title: `${humanize(codeRange.key)} range differs from the documentation`,
+              severity: "Medium",
+              status: "Open",
+              codeFile: file.filename,
+              codeReference: file.filename,
+              docsFile: document.path,
+              docsReference: document.path,
+              outdated: docLine.trim(),
+              codeValue: codeLine,
+              suggestion: `Update ${document.path} to document the supported ${codeRange.key} range from ${codeRange.min} to ${codeRange.max}.`,
+              context: `The pull request changes the supported ${codeRange.key} range, but the documentation describes a different range.`,
+              codeEvidence: codeLine,
+              docsEvidence: docLine.trim(),
+              source: "rules"
+            });
+          }
+        }
+      }
+
       const assignment = parseAssignment(codeLine);
       if (!assignment) continue;
 
@@ -23,7 +62,7 @@ function analyzeWithRules(changedFiles, documents) {
       for (const document of documents) {
         const documentLines = document.content.split(/\r?\n/);
         for (const docLine of documentLines) {
-          if (!lineMentionsKey(docLine, keyTerms)) continue;
+          if (!lineMentionsKey(docLine, keyTerms, assignment.key)) continue;
           const documentationValues = extractComparableValues(docLine, assignment.key);
           if (documentationValues.length === 0 || documentationValues.some((value) => value === codeValue)) continue;
 
@@ -90,6 +129,42 @@ function parseAssignment(line) {
   return value ? { key: match[1], value } : null;
 }
 
+function parseRangeGuard(line) {
+  if (!/\bthrow\b/.test(line)) return null;
+  const condition = line.match(/\bif\s*\(([^)]*)\)/)?.[1];
+  if (!condition) return null;
+  const comparisons = condition.split(/\s*\|\|\s*/).map((part) => {
+    const match = part.trim().match(RANGE_GUARD_PATTERN);
+    if (!match) return null;
+    const value = Number(match[3].replace(/_/g, ""));
+    return Number.isFinite(value) ? { key: match[1], operator: match[2], value } : null;
+  });
+  if (comparisons.length !== 2 || comparisons.some((comparison) => !comparison)) return null;
+  const [first, second] = comparisons;
+  if (first.key !== second.key || first.operator === second.operator) return null;
+
+  const lower = first.operator === "<" ? first : second;
+  const upper = first.operator === ">" ? first : second;
+  if (lower.value > upper.value) return null;
+  return { key: first.key, min: lower.value, max: upper.value };
+}
+
+function extractDocumentedRange(line, keyTerms, key) {
+  const clauses = line.split(/;|\||(?<=[.!?])\s+|,\s+(?!(?:from|between|range)\b)/i);
+  const matches = clauses
+    .filter((clause) => lineMentionsKey(clause, keyTerms, key))
+    .flatMap((clause) => {
+      const clauseRanges = [...clause.matchAll(DOCUMENTED_RANGE_PATTERN)];
+      return clauseRanges.length === 1 ? clauseRanges : [];
+    });
+  if (matches.length !== 1) return null;
+  const match = matches[0];
+  const min = Number((match[1] || match[3] || match[5]).replace(/_/g, ""));
+  const max = Number((match[2] || match[4] || match[6]).replace(/_/g, ""));
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return min <= max ? { min, max } : { min: max, max: min };
+}
+
 function keyWords(key) {
   return key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -103,7 +178,12 @@ function normalizeWord(word) {
   return word.endsWith("s") && word.length > 3 ? word.slice(0, -1) : word;
 }
 
-function lineMentionsKey(line, terms) {
+function lineMentionsKey(line, terms, key) {
+  if (key && key.startsWith("this.")) {
+    const propertyName = key.slice(key.lastIndexOf(".") + 1);
+    const identifierPattern = new RegExp(`(^|[^\\w$])${escapeRegExp(propertyName)}(?=$|[^\\w$])`);
+    return identifierPattern.test(line);
+  }
   const lineWords = new Set((line.toLowerCase().match(/[a-z0-9]+/g) || []).map(normalizeWord));
   return terms.every((term) => lineWords.has(normalizeWord(term)));
 }
