@@ -149,10 +149,15 @@ function verifyAiFinding(candidate, index, changedFiles, documents) {
 
 function hasChangedCodeEvidence(patch, evidence) {
   return patch.split(/\r?\n/).some((line) => {
-    const isAddedLine = line.startsWith("+") && !line.startsWith("+++");
-    const isRemovedLine = line.startsWith("-") && !line.startsWith("---");
+    const isAddedLine = line.startsWith("+") && !isDiffFileHeader(line);
+    const isRemovedLine = line.startsWith("-") && !isDiffFileHeader(line);
     return (isAddedLine || isRemovedLine) && line.slice(1).includes(evidence);
   });
+}
+
+function isDiffFileHeader(line) {
+  return line.startsWith("--- a/") || line.startsWith("+++ b/") ||
+    line === "--- /dev/null" || line === "+++ /dev/null";
 }
 
 function safeText(value, maxLength) {
