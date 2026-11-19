@@ -18,7 +18,7 @@ function analyzeWithRules(changedFiles, documents) {
       const keyTerms = keyWords(assignment.key);
       if (keyTerms.length === 0) continue;
       const codeValue = comparableValue(assignment.value, assignment.key);
-      if (!codeValue) continue;
+      if (codeValue === null) continue;
 
       for (const document of documents) {
         const documentLines = document.content.split(/\r?\n/);
@@ -118,6 +118,9 @@ function comparableValue(value, key) {
 
 function extractComparableValues(line, key) {
   const values = [];
+  for (const match of line.matchAll(/\b(true|false)\b/gi)) {
+    values.push(match[1].toLowerCase());
+  }
   const pattern = /(-?\d[\d,_]*(?:\.\d+)?)\s*(milliseconds?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d)?/gi;
   let match;
   while ((match = pattern.exec(line)) !== null) {

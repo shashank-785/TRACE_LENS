@@ -121,8 +121,9 @@ function verifyAiFinding(candidate, index, changedFiles, documents) {
   const suggestion = safeText(candidate.suggestion, 800);
   const severity = normalizeSeverity(candidate.severity);
 
-  if (!codeFile || !codeFile.patch || !documentation || codeEvidence.length < 5 || docsEvidence.length < 5 ||
-      !isChangedCodeEvidence(codeFile.patch, codeEvidence) || !documentation.content.includes(docsEvidence) ||
+  if (!codeFile || !documentation || codeEvidence.length < 5 || docsEvidence.length < 5 ||
+      typeof codeFile.patch !== "string" || !hasChangedCodeEvidence(codeFile.patch, codeEvidence) ||
+      !documentation.content.includes(docsEvidence) ||
       !title || !context || !suggestion || !severity) {
     return null;
   }
@@ -146,9 +147,14 @@ function verifyAiFinding(candidate, index, changedFiles, documents) {
   };
 }
 
-function isChangedCodeEvidence(patch, evidence) {
+function hasChangedCodeEvidence(patch, evidence) {
+  let inHunk = false;
   return patch.split(/\r?\n/).some((line) => {
-    if (line.startsWith("+++") || line.startsWith("---")) return false;
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      return false;
+    }
+    if (!inHunk) return false;
     return (line.startsWith("+") || line.startsWith("-")) && line.slice(1).includes(evidence);
   });
 }

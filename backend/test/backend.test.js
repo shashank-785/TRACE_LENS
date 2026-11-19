@@ -44,6 +44,40 @@ test("rule analysis reports only a code value that conflicts with an actual docu
   assert.deepEqual(analyzeWithRules(changedFiles, currentDocs), []);
 });
 
+test("rule analysis detects zero-valued defaults and compares boolean values", () => {
+  const zeroChangedFiles = [{
+    filename: "src/config/retries.js",
+    patch: "@@ -1 +1 @@\n-retryCount = 3\n+retryCount = 0"
+  }];
+  const zeroDocs = [{ path: "README.md", content: "The retry count defaults to 3." }];
+  const zeroFindings = analyzeWithRules(zeroChangedFiles, zeroDocs);
+  assert.equal(zeroFindings.length, 1);
+  assert.equal(zeroFindings[0].codeValue, "retryCount = 0");
+  assert.equal(zeroFindings[0].docsEvidence, zeroDocs[0].content);
+  assert.deepEqual(
+    analyzeWithRules(zeroChangedFiles, [{ path: "README.md", content: "The retry count defaults to 0." }]),
+    []
+  );
+
+  const booleanChangedFiles = [{
+    filename: "src/config/features.js",
+    patch: "@@ -1 +1 @@\n-featureEnabled = true\n+featureEnabled = false"
+  }];
+  const booleanFindings = analyzeWithRules(booleanChangedFiles, [{
+    path: "README.md",
+    content: "The feature enabled flag defaults to true."
+  }]);
+  assert.equal(booleanFindings.length, 1);
+  assert.equal(booleanFindings[0].codeValue, "featureEnabled = false");
+  assert.deepEqual(
+    analyzeWithRules(booleanChangedFiles, [{
+      path: "README.md",
+      content: "The feature enabled flag defaults to false."
+    }]),
+    []
+  );
+});
+
 test("rule analysis notes a newly exported symbol absent from the fetched docs", () => {
   const findings = analyzeWithRules(
     [{ filename: "src/api/invoices.js", patch: "@@ -0,0 +1 @@\n+export function createInvoice(input) {" }],
@@ -140,6 +174,28 @@ test("AI evidence is retained only when both excerpts exist in fetched sources",
   assert.equal(verifyAiFinding({ ...valid, codeEvidence: "@@ -1 +1 @@" }, 0, changedFiles, documents), null);
   assert.equal(verifyAiFinding(valid, 0, [{ filename: "src/config/http.js" }], documents), null);
   assert.equal(verifyAiFinding({ ...valid, docsEvidence: "The guide says 5 seconds." }, 0, changedFiles, documents), null);
+
+  const contextOnlyChange = [{
+    filename: "src/config/http.js",
+    patch: "@@ -1,3 +1,3 @@\n requestTimeoutMs: 30000\n-oldOption = true\n+newOption = true"
+  }];
+  assert.equal(verifyAiFinding(valid, 0, contextOnlyChange, documents), null);
+
+  const removedLineFinding = { ...valid, codeEvidence: "requestTimeoutMs: 60000" };
+  assert.ok(verifyAiFinding(removedLineFinding, 0, changedFiles, documents));
+
+  const fileHeadersOnly = [{
+    filename: "src/config/http.js",
+    patch: "diff --git a/src/config/http.js b/src/config/http.js\n--- a/src/config/http.js\n+++ b/src/config/http.js"
+  }];
+  assert.equal(verifyAiFinding({ ...valid, codeEvidence: "b/src/config/http.js" }, 0, fileHeadersOnly, documents), null);
+
+  const operatorCodeChanges = [{
+    filename: "src/config/http.js",
+    patch: "diff --git a/src/config/http.js b/src/config/http.js\n--- a/src/config/http.js\n+++ b/src/config/http.js\n@@ -1 +1 @@\n---oldValue\n+++newValue"
+  }];
+  assert.ok(verifyAiFinding({ ...valid, codeEvidence: "--oldValue" }, 0, operatorCodeChanges, documents));
+  assert.ok(verifyAiFinding({ ...valid, codeEvidence: "++newValue" }, 0, operatorCodeChanges, documents));
 });
 
 test("analysis uses rule fallback when AI is not configured and stores retrievable results", async () => {

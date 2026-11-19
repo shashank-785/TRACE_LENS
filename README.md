@@ -32,8 +32,7 @@ Set these in the root `.env` for local development or in the Render service sett
 | `PORT` | No | HTTP port; defaults to `3000`. Render can supply this automatically. |
 | `GITHUB_TOKEN` | No | Optional server-side token for GitHub REST API rate limits. Public repositories work without it. |
 | `BHARATCODE_API_KEY` | No | BharatCode API credential. Leave empty to use rule-based analysis. |
-| `BHARATCODE_BASE_URL` | No | OpenAI-compatible BharatCode API base URL. Must be set with the key and model to enable AI. |
-| `BHARATCODE_MODEL` | No | Model name configured for the BharatCode endpoint. Must be set with the key and base URL. |
+| `BHARATCODE_MODEL` | No | Model name configured for the BharatCode endpoint. Required with `BHARATCODE_API_KEY` to enable AI. |
 | `CORS_ORIGIN` | No | Comma-separated exact browser origins allowed to call the API; defaults to local frontend preview origins. |
 
 Copy `.env.example` to `.env` and add credentials only to the local `.env` file. `.env` is ignored by Git. BharatCode analysis is opt-in in the UI because the selected public pull request diff and fetched documentation are sent to the configured AI endpoint when enabled.
@@ -60,7 +59,13 @@ All responses use `{ "success": true, "data": ... }` or `{ "success": false, "er
 - The analyzer checks changed lines against retrieved documentation. AI findings are kept only when both evidence excerpts exactly match the supplied diff and documentation. The rule-based fallback checks changed configuration values and newly exported symbols absent from the fetched docs; it does not claim to understand every kind of documentation drift.
 - Pull request analysis is limited to 300 changed files, 12 documentation files, 64 KB per documentation file, and 240 KB of documentation total. Larger repositories or diffs may produce incomplete results.
 - Analysis results are held in memory for up to 30 minutes and are lost when the process restarts.
-- API endpoints do not require user authentication or implement rate limiting. Put the service behind appropriate access controls and request limits before exposing an AI-enabled deployment publicly.
+- The pull request analysis endpoint does not require user authentication and is limited to five requests per client IP per minute. This uses an in-memory limiter, so counts reset when the process restarts and are not shared across service instances; treat it as basic abuse mitigation, not authentication or a durable global quota.
+
+## Backend architecture
+
+The Express application in `backend/src` is the production backend deployed on Render. It serves the frontend and API, including the health check and rate-limited pull request analysis. PR #15 extends this Express backend.
+
+The FastAPI application in `backend/app` is a separate, health-only scaffold retained temporarily for reference. It is not used by the dashboard or the current production deployment, and PR #15 does not depend on it.
 
 ## Deploy on Render
 
