@@ -272,6 +272,7 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     repository: "acme/payments",
     findings: []
   };
+  let analysisRequestCount = 0;
   const services = {
     githubService: {
       getPublicRepository: async (owner, repo) => ({ owner, name: repo, fullName: `${owner}/${repo}`, private: false }),
@@ -282,7 +283,10 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     },
     bharatCodeService: { configured: false },
     analysisService: {
-      analyzePullRequest: async ({ useAi }) => ({ ...mockResults, ai: { requested: useAi } }),
+      analyzePullRequest: async ({ useAi }) => {
+        analysisRequestCount += 1;
+        return { ...mockResults, ai: { requested: useAi } };
+      },
       getResult: (analysisId) => {
         if (analysisId !== mockResults.analysisId) throw new AppError(404, "ANALYSIS_NOT_FOUND", "Missing.");
         return mockResults;
@@ -323,6 +327,29 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
       body: JSON.stringify({ useAi: true })
     }).then((response) => response.json());
     assert.equal(started.data.ai.requested, true);
+
+    for (let request = 1; request < 5; request += 1) {
+      const allowed = await fetch(`${address}/api/repositories/acme/payments/pulls/8/analyze`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ useAi: true })
+      });
+      assert.equal(allowed.status, 201);
+    }
+
+    const limited = await fetch(`${address}/api/repositories/acme/payments/pulls/8/analyze`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ useAi: true })
+    });
+    assert.equal(limited.status, 429);
+    assert.equal(limited.headers.get("retry-after"), "60");
+    assert.deepEqual((await limited.json()).error, {
+      code: "RATE_LIMITED",
+      message: "Too many analysis requests. Please try again later."
+    });
+    assert.equal(analysisRequestCount, 5);
+
     const saved = await fetch(`${address}/api/analysis/test-analysis`).then((response) => response.json());
     assert.equal(saved.data.analysisId, "test-analysis");
 
