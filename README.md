@@ -62,6 +62,12 @@ All responses use `{ "success": true, "data": ... }` or `{ "success": false, "er
 - Analysis results are held in memory for up to 30 minutes and are lost when the process restarts.
 - The pull request analysis endpoint does not require user authentication and is limited to five requests per client IP per minute. This uses an in-memory limiter, so counts reset when the process restarts and are not shared across service instances; treat it as basic abuse mitigation, not authentication or a durable global quota.
 
+## Backend architecture
+
+The Express application in `backend/src` is the production backend deployed on Render. It serves the frontend and API, including the health check and rate-limited pull request analysis. PR #15 extends this Express backend.
+
+The FastAPI application in `backend/app` is a separate, health-only scaffold retained temporarily for reference. It is not used by the dashboard or the current production deployment, and PR #15 does not depend on it.
+
 ## Deploy on Render
 
 The backend serves the frontend pages and API from one origin, so deploy them as a single Render Web Service. The root directory must remain the repository root: the Express frontend routes serve files located outside `backend/`.
