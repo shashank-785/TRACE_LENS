@@ -60,7 +60,7 @@ All responses use `{ "success": true, "data": ... }` or `{ "success": false, "er
 - The analyzer checks changed lines against retrieved documentation. AI findings are kept only when both evidence excerpts exactly match the supplied diff and documentation. The rule-based fallback checks changed configuration values and newly exported symbols absent from the fetched docs; it does not claim to understand every kind of documentation drift.
 - Pull request analysis is limited to 300 changed files, 12 documentation files, 64 KB per documentation file, and 240 KB of documentation total. Larger repositories or diffs may produce incomplete results.
 - Analysis results are held in memory for up to 30 minutes and are lost when the process restarts.
-- API endpoints do not require user authentication or implement rate limiting. Put the service behind appropriate access controls and request limits before exposing an AI-enabled deployment publicly.
+- The pull request analysis endpoint does not require user authentication and is limited to five requests per client IP per minute. This uses an in-memory limiter, so counts reset when the process restarts and are not shared across service instances; treat it as basic abuse mitigation, not authentication or a durable global quota.
 
 ## Deploy on Render
 
