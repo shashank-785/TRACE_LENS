@@ -419,9 +419,8 @@ document.addEventListener("keydown", (event) => {
     document.getElementById("repoMenu").hidden = true;
     document.getElementById("repoPicker").setAttribute("aria-expanded", "false");
     document.getElementById("mainNav").classList.remove("open");
-    const mobileMenuButton = document.getElementById("mobileMenuBtn");
-    mobileMenuButton.setAttribute("aria-expanded", "false");
-    mobileMenuButton.setAttribute("aria-label", "Open navigation");
+    document.getElementById("mobileMenuBtn").setAttribute("aria-expanded", "false");
+    document.getElementById("mobileMenuBtn").setAttribute("aria-label", "Open navigation");
   }
   if (event.key === "/" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) {
     event.preventDefault();
@@ -438,13 +437,30 @@ document.getElementById("viewAllButton").addEventListener("click", () => {
 });
 document.querySelectorAll(".nav-link").forEach((link) => {
   link.addEventListener("click", () => {
-    document.querySelectorAll(".nav-link").forEach((navLink) => navLink.classList.toggle("active", navLink === link));
+    document.querySelectorAll(".nav-link").forEach((navLink) => {
+      const isActive = navLink === link;
+      navLink.classList.toggle("active", isActive);
+      if (isActive) navLink.setAttribute("aria-current", "page");
+      else navLink.removeAttribute("aria-current");
+    });
     document.getElementById("mainNav").classList.remove("open");
-    const mobileMenuButton = document.getElementById("mobileMenuBtn");
-    mobileMenuButton.setAttribute("aria-expanded", "false");
-    mobileMenuButton.setAttribute("aria-label", "Open navigation");
+    document.getElementById("mobileMenuBtn").setAttribute("aria-expanded", "false");
+    document.getElementById("mobileMenuBtn").setAttribute("aria-label", "Open navigation");
   });
 });
+function syncNavigationToHash() {
+  const activeLink = [...document.querySelectorAll(".nav-link")].find((link) => link.getAttribute("href") === window.location.hash);
+  if (activeLink) {
+    document.querySelectorAll(".nav-link").forEach((link) => {
+      const isActive = link === activeLink;
+      link.classList.toggle("active", isActive);
+      if (isActive) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
+  }
+}
+window.addEventListener("hashchange", syncNavigationToHash);
+syncNavigationToHash();
 document.getElementById("mobileMenuBtn").addEventListener("click", (event) => {
   const menu = document.getElementById("mainNav");
   const open = !menu.classList.contains("open");

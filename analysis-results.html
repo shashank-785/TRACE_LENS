@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090611">
-  <meta name="description" content="TRACE LENS sample analysis results showing possible documentation mismatches">
-  <title>TRACE LENS — Analysis Results</title>
+  <meta name="description" content="TRACE LENS analysis results and documentation mismatch findings">
+  <title>TRACE LENS - Analysis Results</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -23,14 +23,15 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4m0 4h.01"/></symbol>
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6m-12 5h8m-8 4h8"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 16v4h16v-4"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3Z"/></symbol>
     <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h2"/></symbol>
   </svg>
-
   <div class="ambient ambient-one"></div>
   <div class="ambient ambient-two"></div>
+
   <header class="topbar">
     <a class="brand" href="index.html#overview" aria-label="TRACE LENS dashboard">
       <span class="brand-mark"><svg class="icon"><use href="#i-lens"/></svg></span>
@@ -43,13 +44,10 @@
       <a class="nav-link" href="index.html#overview"><svg class="icon"><use href="#i-grid"/></svg>Dashboard</a>
       <a class="nav-link" href="index.html#pull-requests"><svg class="icon"><use href="#i-git-pull"/></svg>Pull requests</a>
       <a class="nav-link" href="index.html#drift-details"><svg class="icon"><use href="#i-book"/></svg>Documentation</a>
-      <a class="nav-link" href="index.html#document-upload"><svg class="icon"><use href="#i-file"/></svg>Document Upload</a>
+      <a class="nav-link" href="document-upload.html"><svg class="icon"><use href="#i-upload"/></svg>Document Upload</a>
       <a class="nav-link active" href="analysis-results.html" aria-current="page"><svg class="icon"><use href="#i-alert"/></svg>Analysis Results</a>
       <a class="nav-link" href="index.html#history"><svg class="icon"><use href="#i-history"/></svg>History</a>
     </nav>
-    <div class="topbar-right">
-      <div class="connection"><span class="connection-dot"></span><span>GitHub <b>demo</b></span></div>
-    </div>
   </header>
 
   <main class="app-shell analysis-shell">
@@ -59,112 +57,84 @@
         <div class="analysis-title-row">
           <div>
             <h1>Analysis Results</h1>
-            <p class="page-subtitle">Potential mismatches between source code changes and project documentation. Review each finding before making updates.</p>
+            <p class="page-subtitle">Potential mismatches between source code changes and project documentation.</p>
           </div>
-          <span class="demo-pill"><span></span> SAMPLE DATA</span>
+          <span class="demo-pill" id="analysisDataPill"><span></span> SAMPLE DATA</span>
         </div>
       </div>
-      <a class="button button-secondary analysis-back-button" href="index.html#overview"><svg class="icon tiny"><use href="#i-chevron-right"/></svg>Back to dashboard</a>
+      <a class="button button-secondary analysis-back-button" href="index.html#overview"><svg class="icon tiny"><use href="#i-chevron-right"/></svg>Back to overview</a>
     </div>
 
-    <section class="analysis-summary" aria-label="Finding summary">
-      <article class="analysis-summary-card">
-        <span class="analysis-summary-label">TOTAL FINDINGS</span>
-        <strong id="totalFindings">0</strong>
-        <span class="analysis-summary-note">potential mismatches</span>
-      </article>
-      <article class="analysis-summary-card critical-summary">
-        <span class="analysis-summary-label">CRITICAL / HIGH</span>
-        <strong id="criticalHighFindings">0</strong>
-        <span class="analysis-summary-note">priority findings</span>
-      </article>
-      <article class="analysis-summary-card">
-        <span class="analysis-summary-label">FILES AFFECTED</span>
-        <strong id="affectedFiles">0</strong>
-        <span class="analysis-summary-note">code and documentation</span>
-      </article>
-      <article class="analysis-summary-card review-summary">
-        <span class="analysis-summary-label">NEEDS REVIEW</span>
-        <strong id="needsReview">0</strong>
-        <span class="analysis-summary-note">open findings</span>
-      </article>
+    <section class="panel analysis-setup-panel" aria-labelledby="repositoryAnalysisHeading">
+      <div class="panel-header">
+        <div class="panel-title-block">
+          <div class="panel-heading-line"><h2 id="repositoryAnalysisHeading">Analyze a GitHub pull request</h2></div>
+          <p>Use a public repository URL to load real pull request changes and related documentation.</p>
+        </div>
+        <span class="backend-status" id="backendStatus" role="status">Checking backend…</span>
+      </div>
+      <form class="analysis-setup-form" id="repositoryForm">
+        <label class="analysis-repo-field" for="repositoryUrl">GitHub repository URL
+          <input id="repositoryUrl" name="repositoryUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://github.com/owner/repository" required>
+        </label>
+        <button class="button button-secondary" id="validateRepositoryButton" type="submit">Validate repository</button>
+        <label class="analysis-filter" for="pullRequestSelect">Pull request
+          <select id="pullRequestSelect" disabled><option value="">Validate a repository first</option></select>
+        </label>
+        <button class="button button-primary" id="analyzePullRequestButton" type="button" disabled>Analyze pull request</button>
+        <label class="analysis-ai-option" for="useBharatCode">
+          <input id="useBharatCode" type="checkbox" disabled aria-describedby="aiDisclosure">
+          <span>Use BharatCode AI (optional)</span>
+        </label>
+        <p class="analysis-ai-disclosure" id="aiDisclosure">When enabled, the selected public pull request diff and fetched documentation are sent to the configured BharatCode endpoint. Otherwise, analysis stays rule-based.</p>
+      </form>
+      <p class="analysis-workflow-status" id="workflowStatus" role="status" aria-live="polite">Sample findings remain visible until a repository analysis completes successfully.</p>
+    </section>
+
+    <section class="analysis-summary" aria-label="Analysis summary">
+      <article class="analysis-summary-card"><span class="analysis-summary-label">TOTAL FINDINGS</span><strong id="totalFindings">0</strong><span class="analysis-summary-note">potential mismatches</span></article>
+      <article class="analysis-summary-card high-summary"><span class="analysis-summary-label">HIGH / CRITICAL</span><strong id="priorityFindings">0</strong><span class="analysis-summary-note">priority findings</span></article>
+      <article class="analysis-summary-card"><span class="analysis-summary-label">FILES AFFECTED</span><strong id="affectedFiles">0</strong><span class="analysis-summary-note">code and documentation</span></article>
+      <article class="analysis-summary-card review-summary"><span class="analysis-summary-label">NEEDS REVIEW</span><strong id="needsReview">0</strong><span class="analysis-summary-note">open findings</span></article>
     </section>
 
     <section class="panel analysis-findings-panel" aria-labelledby="findingsHeading">
       <div class="panel-header analysis-panel-header">
         <div class="panel-title-block">
-          <div class="panel-heading-line"><h2 id="findingsHeading">Documentation drift findings</h2><span class="count-pill" id="findingCount">0</span></div>
-          <p>Review the code change and its related documentation before applying a suggestion.</p>
+          <div class="panel-heading-line"><h2 id="findingsHeading">Documentation mismatch findings</h2><span class="count-pill" id="findingCount">0</span></div>
+          <p>Review the code change and the suggested documentation correction.</p>
         </div>
-        <span class="demo-caption"><span></span>Illustrative sample data</span>
+        <span class="demo-caption" id="analysisDataLabel"><span></span>Illustrative sample data</span>
       </div>
+
       <div class="analysis-toolbar">
         <label class="analysis-search">
           <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
-          <span class="sr-only">Search findings by title or filename</span>
+          <span class="sr-only">Search findings</span>
           <input id="findingSearch" type="search" placeholder="Search title or filename..." autocomplete="off">
         </label>
         <div class="analysis-filters">
-          <label class="analysis-filter">Severity
-            <select id="severityFilter" aria-label="Filter by severity">
-              <option value="all">All severities</option>
-              <option value="Critical">Critical</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </select>
-          </label>
-          <label class="analysis-filter">Status
-            <select id="statusFilter" aria-label="Filter by status">
-              <option value="all">All statuses</option>
-              <option value="Open">Open</option>
-              <option value="Reviewed">Reviewed</option>
-              <option value="Resolved">Resolved</option>
-            </select>
-          </label>
+          <label class="analysis-filter">Severity<select id="severityFilter" aria-label="Filter by severity"><option value="all">All severities</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select></label>
+          <label class="analysis-filter">Status<select id="statusFilter" aria-label="Filter by status"><option value="all">All statuses</option><option value="Open">Open</option><option value="Reviewed">Reviewed</option><option value="Resolved">Resolved</option></select></label>
         </div>
       </div>
+
       <div class="analysis-state" id="loadingState" role="status" aria-live="polite">
-        <span class="analysis-spinner" aria-hidden="true"></span>
-        <strong>Loading analysis results...</strong>
+        <span class="analysis-spinner" aria-hidden="true"></span><strong>Loading analysis results...</strong>
       </div>
       <div class="analysis-state analysis-error" id="errorState" role="alert" hidden>
-        <span class="analysis-error-icon" aria-hidden="true">!</span>
-        <strong>Unable to load analysis results</strong>
-        <span>Please try again. Your sample findings are unchanged.</span>
-        <button class="button button-secondary" id="retryAnalysis" type="button">Retry</button>
+        <span class="analysis-error-icon" aria-hidden="true">!</span><strong>Unable to load analysis results</strong><span>The mock analysis could not be loaded.</span><button class="button button-secondary" id="retryAnalysis" type="button">Retry</button>
       </div>
       <p class="analysis-results-count" id="resultsCount" role="status" aria-live="polite" hidden></p>
       <div class="analysis-results-list" id="findingsList" aria-live="polite" hidden></div>
       <div class="analysis-empty-state" id="emptyState" role="status" hidden>
-        <span class="analysis-empty-icon"><svg class="icon"><use href="#i-search"/></svg></span>
-        <strong>No findings match your filters</strong>
-        <span>Try a different search, severity, or status.</span>
-        <button class="text-button" id="clearFilters" type="button">Clear filters</button>
+        <span class="analysis-empty-icon"><svg class="icon"><use href="#i-search"/></svg></span><strong id="emptyStateTitle">No findings match your filters</strong><span id="emptyStateDescription">Try a different search, severity, or status.</span><button class="text-button" id="clearFilters" type="button">Clear filters</button>
       </div>
     </section>
 
-    <footer class="page-footer">
-      <span><span class="footer-mark">◈</span> TRACE LENS <span class="footer-separator">/</span> <span>Documentation that stays in sync.</span></span>
-      <span>DEMO ENVIRONMENT · No live repository data</span>
-    </footer>
+    <footer class="page-footer"><span><span class="footer-mark">◈</span> TRACE LENS <span class="footer-separator">/</span> <span>Documentation that stays in sync.</span></span><span id="analysisFooterStatus">DEMO ENVIRONMENT · No live repository data</span></footer>
   </main>
-
-  <div class="toast" id="resultsToast" role="status" aria-live="polite">
-    <span class="toast-check"><svg class="icon tiny"><use href="#i-check"/></svg></span>
-    <span id="resultsToastMessage">Suggestion copied</span>
-  </div>
-
-  <div class="modal-backdrop" id="findingModalBackdrop" hidden>
-    <section class="evidence-modal analysis-modal" role="dialog" aria-modal="true" aria-labelledby="findingModalTitle" aria-describedby="findingModalIntro" tabindex="-1">
-      <div class="modal-header">
-        <div><span class="modal-eyebrow" id="findingModalEyebrow">FINDING DETAILS</span><h2 id="findingModalTitle">Finding details</h2></div>
-        <button class="modal-close" id="closeFindingModal" type="button" aria-label="Close finding details"><svg class="icon"><use href="#i-close"/></svg></button>
-      </div>
-      <div class="modal-content analysis-modal-content" id="findingModalContent"></div>
-      <div class="modal-footer"><span class="demo-caption"><span></span>Potential mismatch · verify before updating</span><button class="button button-secondary" id="doneFindingModal" type="button">Done</button></div>
-    </section>
-  </div>
+  <div class="toast" id="resultsToast" role="status" aria-live="polite"><span class="toast-check"><svg class="icon tiny"><use href="#i-check"/></svg></span><span id="resultsToastMessage">Suggestion copied</span></div>
   <script src="analysis-results.js"></script>
 </body>
 </html>
