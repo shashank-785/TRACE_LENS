@@ -24,7 +24,6 @@ module.exports = Object.freeze({
   corsOrigins,
   bharatCode: Object.freeze({
     apiKey: (process.env.BHARATCODE_API_KEY || "").trim(),
-    baseURL: (process.env.BHARATCODE_BASE_URL || "").trim(),
     model: (process.env.BHARATCODE_MODEL || "").trim(),
     timeoutMs: 20000
   })

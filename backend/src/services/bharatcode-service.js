@@ -3,16 +3,17 @@
 const OpenAI = require("openai");
 const { AppError } = require("../utils/app-error");
 
+const BHARATCODE_BASE_URL = "https://bharatcode.ai/api/model/v1";
 const MAX_CONTEXT_CHARACTERS = 50000;
 
 class BharatCodeService {
   constructor(settings, client) {
     this.model = settings.model;
-    this.configured = Boolean(settings.apiKey && settings.baseURL && settings.model);
+    this.configured = Boolean(settings.apiKey && settings.model);
     this.client = client || (this.configured
       ? new OpenAI({
         apiKey: settings.apiKey,
-        baseURL: settings.baseURL,
+        baseURL: BHARATCODE_BASE_URL,
         timeout: settings.timeoutMs,
         maxRetries: 0
       })
@@ -37,6 +38,7 @@ class BharatCodeService {
               "You compare GitHub pull request code diffs with repository documentation.",
               "Only report a mismatch when the supplied diff and documentation provide direct evidence.",
               "Never invent paths, code, documentation, values, or findings.",
+              "Use codeEvidence copied from a changed diff line beginning with + or -; do not cite diff headers or unchanged context.",
               "Return only JSON with this shape: {\"findings\":[{\"title\":\"...\",\"severity\":\"High|Medium|Low\",\"codeFile\":\"exact path\",\"docsFile\":\"exact path\",\"codeEvidence\":\"exact substring from supplied diff\",\"docsEvidence\":\"exact substring from supplied documentation\",\"description\":\"...\",\"suggestion\":\"...\"}]}.",
               "Every codeEvidence and docsEvidence value must be copied verbatim from the supplied data."
             ].join(" ")
@@ -56,10 +58,7 @@ class BharatCodeService {
         ]
       });
     } catch (error) {
-      const message = error.name === "APIConnectionTimeoutError"
-        ? "BharatCode AI timed out."
-        : "BharatCode AI could not complete the request.";
-      throw new AppError(502, "BHARATCODE_UNAVAILABLE", message);
+      throw mapProviderError(error);
     }
 
     const content = response?.choices?.[0]?.message?.content;
@@ -68,6 +67,33 @@ class BharatCodeService {
     }
     return parseFindings(content);
   }
+}
+
+function mapProviderError(error) {
+  const name = typeof error?.name === "string" ? error.name : "";
+  const code = typeof error?.code === "string" ? error.code.toLowerCase() : "";
+  const status = Number(error?.status);
+  const message = typeof error?.message === "string" ? error.message.toLowerCase() : "";
+
+  if (name === "APIConnectionTimeoutError" || name === "TimeoutError" ||
+      name === "AbortError" || code === "etimedout" || code === "err_timeout") {
+    return new AppError(504, "BHARATCODE_TIMEOUT", "BharatCode AI timed out.");
+  }
+  if (status === 401 || status === 403 || name === "AuthenticationError" ||
+      name === "PermissionDeniedError" || code === "invalid_api_key") {
+    return new AppError(502, "BHARATCODE_AUTHENTICATION_FAILED", "The BharatCode API key was rejected or lacks permission.");
+  }
+  if (status === 404 || code === "model_not_found" ||
+      (status === 400 && /model.*(not found|does not exist|unavailable)|unknown model/.test(message))) {
+    return new AppError(502, "BHARATCODE_MODEL_UNAVAILABLE", "The configured BharatCode model is unavailable.");
+  }
+  if (status === 429 || name === "RateLimitError") {
+    return new AppError(502, "BHARATCODE_RATE_LIMITED", "BharatCode rate limit reached.");
+  }
+  if (name === "APIConnectionError") {
+    return new AppError(502, "BHARATCODE_CONNECTION_FAILED", "Could not connect to BharatCode.");
+  }
+  return new AppError(502, "BHARATCODE_API_ERROR", "BharatCode AI returned an API error.");
 }
 
 function prepareContext(changedFiles, documents) {
@@ -103,4 +129,4 @@ function parseFindings(content) {
   return parsed.findings;
 }
 
-module.exports = { BharatCodeService, parseFindings, prepareContext };
+module.exports = { BHARATCODE_BASE_URL, BharatCodeService, parseFindings, prepareContext };

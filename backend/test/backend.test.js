@@ -5,7 +5,7 @@ const { once } = require("node:events");
 const test = require("node:test");
 const { createApp } = require("../src/app");
 const { AnalysisService, verifyAiFinding } = require("../src/services/analysis-service");
-const { BharatCodeService, parseFindings } = require("../src/services/bharatcode-service");
+const { BHARATCODE_BASE_URL, BharatCodeService, parseFindings } = require("../src/services/bharatcode-service");
 const { GitHubService } = require("../src/services/github-service");
 const { analyzeWithRules } = require("../src/services/rule-analysis");
 const { AppError } = require("../src/utils/app-error");
@@ -55,7 +55,7 @@ test("rule analysis notes a newly exported symbol absent from the fetched docs",
   assert.match(findings[0].codeEvidence, /export function createInvoice/);
 });
 
-test("BharatCode client uses the configured model and parses a mock OpenAI-compatible response", async () => {
+test("BharatCode client uses the official endpoint and sends code and documentation evidence", async () => {
   let request;
   const mockClient = {
     chat: {
@@ -69,7 +69,6 @@ test("BharatCode client uses the configured model and parses a mock OpenAI-compa
   };
   const ai = new BharatCodeService({
     apiKey: "test-key-not-sent",
-    baseURL: "https://bharatcode.example.test/v1",
     model: "configured-test-model",
     timeoutMs: 50
   }, mockClient);
@@ -80,9 +79,50 @@ test("BharatCode client uses the configured model and parses a mock OpenAI-compa
     documents
   });
   assert.deepEqual(findings, []);
+  const context = JSON.parse(request.messages[1].content);
+  const configuredClient = new BharatCodeService({
+    apiKey: "test-key-not-sent",
+    model: "configured-test-model",
+    timeoutMs: 50
+  });
+  assert.equal(ai.configured, true);
+  assert.equal(configuredClient.client.baseURL, BHARATCODE_BASE_URL);
+  assert.equal(BHARATCODE_BASE_URL, "https://bharatcode.ai/api/model/v1");
   assert.equal(request.model, "configured-test-model");
   assert.equal(request.messages[1].role, "user");
+  assert.equal(context.changedFiles[0].patch, changedFiles[0].patch);
+  assert.equal(context.documentation[0].content, documents[0].content);
   assert.throws(() => parseFindings("not json"), (error) => error.code === "INVALID_BHARATCODE_RESPONSE");
+});
+
+test("BharatCode API failures have safe, specific fallback errors", async () => {
+  const errors = [
+    { name: "AuthenticationError", status: 401, code: "invalid_api_key", expected: "BHARATCODE_AUTHENTICATION_FAILED" },
+    { name: "NotFoundError", status: 404, code: "model_not_found", expected: "BHARATCODE_MODEL_UNAVAILABLE" },
+    { name: "APIConnectionTimeoutError", expected: "BHARATCODE_TIMEOUT" },
+    { name: "RateLimitError", status: 429, expected: "BHARATCODE_RATE_LIMITED" },
+    { name: "InternalServerError", status: 500, expected: "BHARATCODE_API_ERROR" }
+  ];
+
+  for (const failure of errors) {
+    const providerError = Object.assign(new Error("provider detail must not be surfaced"), failure);
+    const ai = new BharatCodeService({
+      apiKey: "test-key-not-sent",
+      model: "configured-test-model"
+    }, {
+      chat: { completions: { create: async () => { throw providerError; } } }
+    });
+
+    await assert.rejects(ai.analyze({
+      pullRequest: { number: 2, title: "Test change", body: "" },
+      changedFiles,
+      documents
+    }), (error) => {
+      assert.equal(error.code, failure.expected);
+      assert.equal(error.message.includes("provider detail"), false);
+      return true;
+    });
+  }
 });
 
 test("AI evidence is retained only when both excerpts exist in fetched sources", () => {
@@ -97,6 +137,8 @@ test("AI evidence is retained only when both excerpts exist in fetched sources",
     suggestion: "Update the guide to say 30 seconds."
   };
   assert.ok(verifyAiFinding(valid, 0, changedFiles, documents));
+  assert.equal(verifyAiFinding({ ...valid, codeEvidence: "@@ -1 +1 @@" }, 0, changedFiles, documents), null);
+  assert.equal(verifyAiFinding(valid, 0, [{ filename: "src/config/http.js" }], documents), null);
   assert.equal(verifyAiFinding({ ...valid, docsEvidence: "The guide says 5 seconds." }, 0, changedFiles, documents), null);
 });
 
@@ -153,6 +195,62 @@ test("analysis discards unverified AI findings and keeps verified results", asyn
   assert.ok(result.findings.some((finding) => finding.source === "bharatcode"));
   assert.ok(result.warnings.some((warning) => warning.includes("discarded")));
   assert.equal(result.findings.filter((finding) => finding.codeEvidence === "invented code").length, 0);
+});
+
+test("BharatCode PR analysis keeps a verified mismatch and leaves a clean PR empty", async () => {
+  const mismatch = {
+    title: "The timeout documentation is outdated",
+    severity: "Medium",
+    codeFile: "src/config/http.js",
+    docsFile: "README.md",
+    codeEvidence: "requestTimeoutMs: 30000",
+    docsEvidence: "The request timeout is 60 seconds by default.",
+    description: "The changed timeout differs from the documented default.",
+    suggestion: "Update the documented default to 30 seconds."
+  };
+  const mismatchClient = {
+    chat: {
+      completions: {
+        create: async () => ({ choices: [{ message: { content: JSON.stringify({ findings: [mismatch] }) } }] })
+      }
+    }
+  };
+  const mismatchAnalysis = new AnalysisService({
+    githubService: createMockGitHubService(),
+    bharatCodeService: new BharatCodeService({
+      apiKey: "test-key-not-sent",
+      model: "configured-test-model"
+    }, mismatchClient)
+  });
+  const mismatchResult = await mismatchAnalysis.analyzePullRequest({
+    owner: "acme", repo: "payments", pullNumber: 8, useAi: true
+  });
+  assert.equal(mismatchResult.ai.used, true);
+  assert.equal(mismatchResult.findings.length, 1);
+  assert.equal(mismatchResult.findings[0].docsEvidence, documents[0].content.split("\n")[1]);
+
+  const cleanDocuments = [{
+    path: "README.md",
+    content: "## Network configuration\nThe request timeout is 30 seconds by default."
+  }];
+  const cleanAnalysis = new AnalysisService({
+    githubService: createMockGitHubService({ docs: cleanDocuments }),
+    bharatCodeService: new BharatCodeService({
+      apiKey: "test-key-not-sent",
+      model: "configured-test-model"
+    }, {
+      chat: {
+        completions: {
+          create: async () => ({ choices: [{ message: { content: "{\"findings\":[]}" } }] })
+        }
+      }
+    })
+  });
+  const cleanResult = await cleanAnalysis.analyzePullRequest({
+    owner: "acme", repo: "payments", pullNumber: 8, useAi: true
+  });
+  assert.equal(cleanResult.ai.used, true);
+  assert.deepEqual(cleanResult.findings, []);
 });
 
 test("analysis falls back to rules after a BharatCode request failure", async () => {
