@@ -88,7 +88,7 @@
         </label>
         <p class="analysis-ai-disclosure" id="aiDisclosure">When enabled, the selected public pull request diff and fetched documentation are sent to the configured BharatCode endpoint. Otherwise, analysis stays rule-based.</p>
       </form>
-      <p class="analysis-workflow-status" id="workflowStatus" role="status" aria-live="polite">Sample findings remain visible until a repository analysis completes successfully.</p>
+      <p class="analysis-workflow-status" id="workflowStatus" role="status" aria-live="polite">Sample findings are shown until a live repository analysis completes successfully.</p>
     </section>
 
     <section class="analysis-summary" aria-label="Analysis summary">
@@ -119,11 +119,11 @@
         </div>
       </div>
 
-      <div class="analysis-state" id="loadingState" role="status" aria-live="polite">
-        <span class="analysis-spinner" aria-hidden="true"></span><strong>Loading analysis results...</strong>
+      <div class="analysis-state" id="loadingState" role="status" aria-live="polite" hidden>
+        <span class="analysis-spinner" aria-hidden="true"></span><strong>Analyzing the selected pull request...</strong>
       </div>
       <div class="analysis-state analysis-error" id="errorState" role="alert" hidden>
-        <span class="analysis-error-icon" aria-hidden="true">!</span><strong>Unable to load analysis results</strong><span>The mock analysis could not be loaded.</span><button class="button button-secondary" id="retryAnalysis" type="button">Retry</button>
+        <span class="analysis-error-icon" aria-hidden="true">!</span><strong>Live analysis failed</strong><span id="analysisErrorMessage">The selected pull request could not be analyzed.</span><button class="button button-secondary" id="retryAnalysis" type="button">Retry analysis</button>
       </div>
       <p class="analysis-results-count" id="resultsCount" role="status" aria-live="polite" hidden></p>
       <div class="analysis-results-list" id="findingsList" aria-live="polite" hidden></div>

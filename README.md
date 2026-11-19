@@ -11,13 +11,12 @@ Requirements: Node.js 20 or newer.
 From the repository root in PowerShell:
 
 ```powershell
-Copy-Item .env.example .env
-Set-Location backend
-npm install
-npm start
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+npm --prefix backend ci
+npm --prefix backend start
 ```
 
-Open `http://localhost:3000/`. Check server health at `http://localhost:3000/api/health`. To run tests, use `npm test` from the `backend` directory.
+Open `http://localhost:3000/`. Check server health at `http://localhost:3000/api/health`. To run tests from the repository root, use `npm --prefix backend test`.
 
 The sample dashboard continues to work without the backend. To use GitHub analysis, open the Analysis Results page served by Express, enter a public GitHub repository URL, validate it, choose an open pull request, and select **Analyze pull request**. Sample findings are replaced only after the backend completes and a result can be retrieved.
 
@@ -36,9 +35,11 @@ Set these in the root `.env` for local development or in the Render service sett
 | `BHARATCODE_MODEL` | No | Model identifier configured for the BharatCode endpoint. Required with `BHARATCODE_API_KEY` to enable AI; TRACE LENS does not assume a model name. |
 | `CORS_ORIGIN` | No | Comma-separated exact browser origins allowed to call the API; defaults to local frontend preview origins. |
 
-Copy `.env.example` to `.env` and add credentials only to the local `.env` file. `.env` is ignored by Git. BharatCode analysis is opt-in in the UI because the selected public pull request diff and fetched documentation are sent to the configured AI endpoint when enabled.
+Copy `.env.example` to `.env` if it does not already exist. Add `BHARATCODE_API_KEY` and a model identifier currently listed for your account in the [BharatCode developer API documentation](https://bharatcode.ai/build); the API's `GET /models` endpoint lists available models. The default `BHARATCODE_BASE_URL` is `https://bharatcode.ai/api/model/v1`; override it only when required. AI remains disabled if the API key or model is blank, and the server continues with rule-based analysis. `.env` is ignored by Git. Never place credentials in frontend files or commit `.env`.
 
-On Render, set `BHARATCODE_API_KEY` and `BHARATCODE_MODEL` in the web service environment settings to enable AI. `BHARATCODE_BASE_URL` is optional and should be set only to override the default endpoint. Keep the API key in Render's environment settings; do not add it to `render.yaml`.
+BharatCode analysis is opt-in in the UI. When enabled, the selected public pull request diff and fetched documentation are sent to BharatCode. `/api/health` reports whether the required settings are present; it does not test provider connectivity. An AI result is reported as used only after a successful, complete provider response has been parsed.
+
+On Render, add `BHARATCODE_API_KEY` and `BHARATCODE_MODEL` in the web service's **Environment** settings to enable AI. Choose a model currently available to the account; do not assume that a model ID remains available or included in every plan. `BHARATCODE_BASE_URL` is optional and should be set only to override the default endpoint. Keep the key in Render's environment settings; do not add it to `render.yaml`.
 
 ## API
 

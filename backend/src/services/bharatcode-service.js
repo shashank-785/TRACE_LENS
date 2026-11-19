@@ -9,7 +9,8 @@ const MAX_CONTEXT_CHARACTERS = 50000;
 class BharatCodeService {
   constructor(settings, client) {
     this.model = settings.model;
-    this.configured = Boolean(settings.apiKey && settings.model);
+    this.configurationError = settings.configurationError || "";
+    this.configured = Boolean(settings.apiKey && settings.model && !this.configurationError);
     this.client = client || (this.configured
       ? new OpenAI({
         apiKey: settings.apiKey,
@@ -22,7 +23,9 @@ class BharatCodeService {
 
   async analyze({ pullRequest, changedFiles, documents }) {
     if (!this.configured || !this.client) {
-      throw new AppError(503, "BHARATCODE_NOT_CONFIGURED", "BharatCode AI is not configured.");
+      const code = this.configurationError ? "BHARATCODE_INVALID_CONFIGURATION" : "BHARATCODE_NOT_CONFIGURED";
+      const message = this.configurationError || "BharatCode AI is not configured.";
+      throw new AppError(503, code, message);
     }
 
     const context = prepareContext(changedFiles, documents);
@@ -61,7 +64,12 @@ class BharatCodeService {
       throw mapProviderError(error);
     }
 
-    const content = response?.choices?.[0]?.message?.content;
+    const choice = response?.choices?.[0];
+    if (choice?.finish_reason === "length") {
+      throw new AppError(502, "BHARATCODE_INCOMPLETE_RESPONSE", "BharatCode AI returned a truncated response.");
+    }
+
+    const content = choice?.message?.content;
     if (typeof content !== "string" || !content.trim()) {
       throw new AppError(502, "INVALID_BHARATCODE_RESPONSE", "BharatCode AI returned an empty response.");
     }
@@ -71,26 +79,32 @@ class BharatCodeService {
 
 function mapProviderError(error) {
   const name = typeof error?.name === "string" ? error.name : "";
+  const errorType = typeof error?.constructor?.name === "string" ? error.constructor.name : "";
   const code = typeof error?.code === "string" ? error.code.toLowerCase() : "";
   const status = Number(error?.status);
   const message = typeof error?.message === "string" ? error.message.toLowerCase() : "";
+  const isErrorType = (type) => name === type || errorType === type;
 
-  if (name === "APIConnectionTimeoutError" || name === "TimeoutError" ||
-      name === "AbortError" || code === "etimedout" || code === "err_timeout") {
+  if (isErrorType("APIConnectionTimeoutError") || name === "TimeoutError" ||
+      name === "AbortError" || code === "etimedout" || code === "err_timeout" ||
+      status === 408) {
     return new AppError(504, "BHARATCODE_TIMEOUT", "BharatCode AI timed out.");
   }
-  if (status === 401 || status === 403 || name === "AuthenticationError" ||
-      name === "PermissionDeniedError" || code === "invalid_api_key") {
+  if (status === 401 || status === 403 || isErrorType("AuthenticationError") ||
+      isErrorType("PermissionDeniedError") || code === "invalid_api_key") {
     return new AppError(502, "BHARATCODE_AUTHENTICATION_FAILED", "The BharatCode API key was rejected or lacks permission.");
   }
-  if (code === "model_not_found" ||
+  if (code === "model_not_found" || code === "retired_model" || status === 410 ||
       (status === 400 && /model.*(not found|does not exist|unavailable)|unknown model/.test(message))) {
     return new AppError(502, "BHARATCODE_MODEL_UNAVAILABLE", "The configured BharatCode model is unavailable.");
   }
-  if (status === 429 || name === "RateLimitError") {
+  if (status === 503) {
+    return new AppError(503, "BHARATCODE_BUSY", "BharatCode AI is busy. Please retry shortly.");
+  }
+  if (status === 429 || isErrorType("RateLimitError")) {
     return new AppError(502, "BHARATCODE_RATE_LIMITED", "BharatCode rate limit reached.");
   }
-  if (name === "APIConnectionError") {
+  if (isErrorType("APIConnectionError")) {
     return new AppError(502, "BHARATCODE_CONNECTION_FAILED", "Could not connect to BharatCode.");
   }
   return new AppError(502, "BHARATCODE_API_ERROR", "BharatCode AI returned an API error.");
