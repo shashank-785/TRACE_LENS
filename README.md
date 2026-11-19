@@ -32,11 +32,13 @@ Set these in the root `.env` for local development or in the Render service sett
 | `PORT` | No | HTTP port; defaults to `3000`. Render can supply this automatically. |
 | `GITHUB_TOKEN` | No | Optional server-side token for GitHub REST API rate limits. Public repositories work without it. |
 | `BHARATCODE_API_KEY` | No | BharatCode API credential. Leave empty to use rule-based analysis. |
-| `BHARATCODE_BASE_URL` | No | OpenAI-compatible BharatCode API base URL. Must be set with the key and model to enable AI. |
-| `BHARATCODE_MODEL` | No | Model name configured for the BharatCode endpoint. Must be set with the key and base URL. |
+| `BHARATCODE_BASE_URL` | No | OpenAI-compatible BharatCode API base URL; defaults to `https://bharatcode.ai/api/model/v1`. Override only when needed. |
+| `BHARATCODE_MODEL` | No | Model identifier configured for the BharatCode endpoint. Required with `BHARATCODE_API_KEY` to enable AI; TRACE LENS does not assume a model name. |
 | `CORS_ORIGIN` | No | Comma-separated exact browser origins allowed to call the API; defaults to local frontend preview origins. |
 
 Copy `.env.example` to `.env` and add credentials only to the local `.env` file. `.env` is ignored by Git. BharatCode analysis is opt-in in the UI because the selected public pull request diff and fetched documentation are sent to the configured AI endpoint when enabled.
+
+On Render, set `BHARATCODE_API_KEY` and `BHARATCODE_MODEL` in the web service environment settings to enable AI. `BHARATCODE_BASE_URL` is optional and should be set only to override the default endpoint. Keep the API key in Render's environment settings; do not add it to `render.yaml`.
 
 ## API
 

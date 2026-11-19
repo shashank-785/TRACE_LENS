@@ -5,7 +5,7 @@ const { config } = require("./config");
 
 const server = createApp().listen(config.port, () => {
   console.log(`TRACE LENS server listening on port ${config.port}.`);
-  console.log(config.bharatCode.apiKey && config.bharatCode.baseURL && config.bharatCode.model
+  console.log(config.bharatCode.apiKey && config.bharatCode.model
     ? "BharatCode AI is configured."
     : "BharatCode AI is unavailable; rule-based analysis remains enabled.");
 });

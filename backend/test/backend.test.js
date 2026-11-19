@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const test = require("node:test");
 const { createApp } = require("../src/app");
+const { DEFAULT_BHARATCODE_BASE_URL, loadBharatCodeSettings } = require("../src/config/bharatcode");
 const { AnalysisService, verifyAiFinding } = require("../src/services/analysis-service");
 const { BharatCodeService, parseFindings } = require("../src/services/bharatcode-service");
 const { GitHubService } = require("../src/services/github-service");
@@ -219,7 +220,7 @@ test("rule analysis notes a newly exported symbol absent from the fetched docs",
   assert.match(findings[0].codeEvidence, /export function createInvoice/);
 });
 
-test("BharatCode client uses the configured model and parses a mock OpenAI-compatible response", async () => {
+test("BharatCode client uses its configured endpoint and model with an OpenAI-compatible response", async () => {
   let request;
   const mockClient = {
     chat: {
@@ -243,10 +244,77 @@ test("BharatCode client uses the configured model and parses a mock OpenAI-compa
     changedFiles,
     documents
   });
+  const context = JSON.parse(request.messages[1].content);
   assert.deepEqual(findings, []);
   assert.equal(request.model, "configured-test-model");
   assert.equal(request.messages[1].role, "user");
+  assert.equal(context.changedFiles[0].patch, changedFiles[0].patch);
+  assert.equal(context.documentation[0].content, documents[0].content);
+  assert.match(request.messages[0].content, /changed diff line/);
   assert.throws(() => parseFindings("not json"), (error) => error.code === "INVALID_BHARATCODE_RESPONSE");
+});
+
+test("BharatCode settings default and validate the endpoint and require the key and model", () => {
+  const missingCredentials = loadBharatCodeSettings({});
+  assert.equal(missingCredentials.baseURL, DEFAULT_BHARATCODE_BASE_URL);
+  assert.equal(new BharatCodeService(missingCredentials).configured, false);
+  assert.equal(new BharatCodeService(loadBharatCodeSettings({
+    BHARATCODE_MODEL: "configured-test-model"
+  })).configured, false);
+  assert.equal(new BharatCodeService(loadBharatCodeSettings({
+    BHARATCODE_API_KEY: "test-key-not-sent"
+  })).configured, false);
+
+  const configured = loadBharatCodeSettings({
+    BHARATCODE_API_KEY: "test-key-not-sent",
+    BHARATCODE_MODEL: "configured-test-model"
+  });
+  assert.equal(new BharatCodeService(configured).configured, true);
+  assert.equal(new BharatCodeService(configured).client.baseURL, DEFAULT_BHARATCODE_BASE_URL);
+
+  const override = loadBharatCodeSettings({
+    BHARATCODE_API_KEY: "test-key-not-sent",
+    BHARATCODE_MODEL: "configured-test-model",
+    BHARATCODE_BASE_URL: "https://bharatcode.example.test/v1"
+  });
+  assert.equal(override.baseURL, "https://bharatcode.example.test/v1");
+  assert.equal(new BharatCodeService(override).client.baseURL, "https://bharatcode.example.test/v1");
+  assert.equal(loadBharatCodeSettings({ BHARATCODE_BASE_URL: "  " }).baseURL, DEFAULT_BHARATCODE_BASE_URL);
+  assert.throws(() => loadBharatCodeSettings({ BHARATCODE_BASE_URL: "http://example.test/v1" }), /valid HTTPS URL/);
+  assert.throws(() => loadBharatCodeSettings({ BHARATCODE_BASE_URL: "not a URL" }), /valid HTTPS URL/);
+});
+
+test("BharatCode provider errors are mapped without exposing provider details", async () => {
+  const failures = [
+    { name: "AuthenticationError", status: 401, code: "invalid_api_key", expected: "BHARATCODE_AUTHENTICATION_FAILED" },
+    { name: "NotFoundError", status: 404, code: "model_not_found", expected: "BHARATCODE_MODEL_UNAVAILABLE" },
+    { name: "APIConnectionTimeoutError", expected: "BHARATCODE_TIMEOUT" },
+    { name: "RateLimitError", status: 429, expected: "BHARATCODE_RATE_LIMITED" },
+    { name: "APIConnectionError", expected: "BHARATCODE_CONNECTION_FAILED" },
+    { name: "NotFoundError", status: 404, expected: "BHARATCODE_API_ERROR" },
+    { name: "InternalServerError", status: 500, expected: "BHARATCODE_API_ERROR" }
+  ];
+
+  for (const failure of failures) {
+    const providerError = Object.assign(new Error("provider detail must not be surfaced"), failure);
+    const ai = new BharatCodeService({
+      apiKey: "test-key-not-sent",
+      baseURL: DEFAULT_BHARATCODE_BASE_URL,
+      model: "configured-test-model"
+    }, {
+      chat: { completions: { create: async () => { throw providerError; } } }
+    });
+
+    await assert.rejects(ai.analyze({
+      pullRequest: { number: 2, title: "Test change", body: "" },
+      changedFiles,
+      documents
+    }), (error) => {
+      assert.equal(error.code, failure.expected);
+      assert.equal(error.message.includes("provider detail"), false);
+      return true;
+    });
+  }
 });
 
 test("AI evidence is retained only when both excerpts exist in fetched sources", () => {
@@ -374,12 +442,20 @@ test("analysis discards unverified AI findings and keeps verified results", asyn
 });
 
 test("analysis falls back to rules after a BharatCode request failure", async () => {
+  const bharatCodeService = new BharatCodeService({
+    apiKey: "test-key-not-sent",
+    baseURL: DEFAULT_BHARATCODE_BASE_URL,
+    model: "configured-test-model"
+  }, {
+    chat: {
+      completions: {
+        create: async () => { throw Object.assign(new Error("provider response must not be exposed"), { status: 500 }); }
+      }
+    }
+  });
   const analysis = new AnalysisService({
     githubService: createMockGitHubService(),
-    bharatCodeService: {
-      configured: true,
-      analyze: async () => { throw new AppError(502, "BHARATCODE_UNAVAILABLE", "BharatCode AI could not complete the request."); }
-    }
+    bharatCodeService
   });
   const result = await analysis.analyzePullRequest({ owner: "acme", repo: "payments", pullNumber: 8, useAi: true });
 
