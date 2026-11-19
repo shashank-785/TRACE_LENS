@@ -11,13 +11,12 @@ Requirements: Node.js 20 or newer.
 From the repository root in PowerShell:
 
 ```powershell
-Copy-Item .env.example .env
-Set-Location backend
-npm install
-npm start
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+npm --prefix backend ci
+npm --prefix backend start
 ```
 
-Open `http://localhost:3000/`. Check server health at `http://localhost:3000/api/health`. To run tests, use `npm test` from the `backend` directory.
+Open `http://localhost:3000/`. Check server health at `http://localhost:3000/api/health`. To run the backend tests from the repository root, use `npm --prefix backend test`.
 
 The sample dashboard continues to work without the backend. To use GitHub analysis, open the Analysis Results page served by Express, enter a public GitHub repository URL, validate it, choose an open pull request, and select **Analyze pull request**. Sample findings are replaced only after the backend completes and a result can be retrieved.
 
@@ -32,8 +31,8 @@ Set these in the root `.env` for local development or in the Render service sett
 | `PORT` | No | HTTP port; defaults to `3000`. Render can supply this automatically. |
 | `GITHUB_TOKEN` | No | Optional server-side token for GitHub REST API rate limits. Public repositories work without it. |
 | `BHARATCODE_API_KEY` | No | BharatCode API credential. Leave empty to use rule-based analysis. |
-| `BHARATCODE_BASE_URL` | No | OpenAI-compatible BharatCode API base URL. Must be set with the key and model to enable AI. |
-| `BHARATCODE_MODEL` | No | Model name configured for the BharatCode endpoint. Must be set with the key and base URL. |
+| `BHARATCODE_BASE_URL` | No | OpenAI-compatible BharatCode API base URL; defaults to `https://bharatcode.ai/api/model/v1`. Override only when needed. |
+| `BHARATCODE_MODEL` | No | Model name configured for the BharatCode endpoint. Required with `BHARATCODE_API_KEY` to enable AI. |
 | `CORS_ORIGIN` | No | Comma-separated exact browser origins allowed to call the API; defaults to local frontend preview origins. |
 
 Copy `.env.example` to `.env` and add credentials only to the local `.env` file. `.env` is ignored by Git. BharatCode analysis is opt-in in the UI because the selected public pull request diff and fetched documentation are sent to the configured AI endpoint when enabled.

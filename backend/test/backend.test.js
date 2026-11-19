@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const { once } = require("node:events");
 const test = require("node:test");
 const { createApp } = require("../src/app");
+const { loadBharatCodeSettings } = require("../src/config/env");
 const { AnalysisService, verifyAiFinding } = require("../src/services/analysis-service");
 const { BharatCodeService, parseFindings } = require("../src/services/bharatcode-service");
 const { GitHubService } = require("../src/services/github-service");
@@ -117,6 +118,29 @@ test("BharatCode client uses the configured model and parses a mock OpenAI-compa
   assert.equal(request.model, "configured-test-model");
   assert.equal(request.messages[1].role, "user");
   assert.throws(() => parseFindings("not json"), (error) => error.code === "INVALID_BHARATCODE_RESPONSE");
+});
+
+test("BharatCode settings default the official URL, allow overrides, and require credentials", () => {
+  const missingCredentials = loadBharatCodeSettings({});
+  assert.equal(missingCredentials.baseURL, "https://bharatcode.ai/api/model/v1");
+  assert.equal(new BharatCodeService(missingCredentials).configured, false);
+  assert.equal(new BharatCodeService(loadBharatCodeSettings({
+    BHARATCODE_MODEL: "configured-test-model"
+  })).configured, false);
+  assert.equal(new BharatCodeService(loadBharatCodeSettings({
+    BHARATCODE_API_KEY: "test-key-not-sent"
+  })).configured, false);
+
+  const configured = loadBharatCodeSettings({
+    BHARATCODE_API_KEY: "test-key-not-sent",
+    BHARATCODE_BASE_URL: "https://bharatcode.example.test/v1",
+    BHARATCODE_MODEL: "configured-test-model"
+  });
+  assert.equal(configured.baseURL, "https://bharatcode.example.test/v1");
+  assert.equal(new BharatCodeService(configured).configured, true);
+
+  const blankOverride = loadBharatCodeSettings({ BHARATCODE_BASE_URL: "  " });
+  assert.equal(blankOverride.baseURL, "https://bharatcode.ai/api/model/v1");
 });
 
 test("AI evidence is retained only when both excerpts exist in fetched sources", () => {
