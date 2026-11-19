@@ -10,6 +10,7 @@ const frontendFiles = new Map([
   ["/analysis-results.html", "analysis-results.html"],
   ["/style.css", "style.css"],
   ["/script.js", "script.js"],
+  ["/theme.js", "theme.js"],
   ["/document-upload.js", "document-upload.js"],
   ["/analysis-results.js", "analysis-results.js"]
 ]);

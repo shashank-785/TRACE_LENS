@@ -865,6 +865,10 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     assert.match(frontendSource, /analysis was used/);
     assert.match(frontendSource, /rule-based fallback/);
 
+    const themeScript = await fetch(`${address}/theme.js`);
+    assert.equal(themeScript.status, 200);
+    assert.match(await themeScript.text(), /data-theme-toggle/);
+
     const missingPage = await fetch(`${address}/backend/src/config/env.js`);
     assert.equal(missingPage.status, 404);
 
