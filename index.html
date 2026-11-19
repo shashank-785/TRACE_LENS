@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -67,6 +68,9 @@
       <a class="nav-link" href="analysis-results.html" aria-label="Analysis Results"><svg class="icon"><use href="#i-alert"/></svg>Analysis Results</a>
       <a class="nav-link" href="#history"><svg class="icon"><use href="#i-history"/></svg>History</a>
     </nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to light mode" aria-pressed="false" title="Switch to light mode">
+      <span class="theme-toggle-icon" data-theme-icon aria-hidden="true">☼</span><span class="theme-toggle-label" data-theme-label>Light mode</span>
+    </button>
     <div class="topbar-right">
       <div class="connection"><span class="connection-dot"></span><span>GitHub <b>demo</b></span></div>
       <span class="topbar-divider slim"></span>
