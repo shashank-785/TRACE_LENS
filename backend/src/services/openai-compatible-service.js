@@ -1,20 +1,21 @@
 "use strict";
 
 const OpenAI = require("openai");
-const { DEFAULT_BHARATCODE_BASE_URL } = require("../config/bharatcode");
 const { AppError } = require("../utils/app-error");
 
 const MAX_CONTEXT_CHARACTERS = 50000;
 
-class BharatCodeService {
+class OpenAICompatibleService {
   constructor(settings, client) {
     this.model = settings.model;
+    this.providerName = settings.providerName || "OpenAI-compatible provider";
     this.configurationError = settings.configurationError || "";
-    this.configured = Boolean(settings.apiKey && settings.model && !this.configurationError);
+    this.missingSettings = settings.missingSettings || [];
+    this.configured = Boolean(settings.apiKey && settings.baseURL && settings.model && !this.configurationError);
     this.client = client || (this.configured
       ? new OpenAI({
         apiKey: settings.apiKey,
-        baseURL: settings.baseURL || DEFAULT_BHARATCODE_BASE_URL,
+        baseURL: settings.baseURL,
         timeout: settings.timeoutMs,
         maxRetries: 0
       })
@@ -23,8 +24,8 @@ class BharatCodeService {
 
   async analyze({ pullRequest, changedFiles, documents }) {
     if (!this.configured || !this.client) {
-      const code = this.configurationError ? "BHARATCODE_INVALID_CONFIGURATION" : "BHARATCODE_NOT_CONFIGURED";
-      const message = this.configurationError || "BharatCode AI is not configured.";
+      const code = this.configurationError ? "AI_PROVIDER_INVALID_CONFIGURATION" : "AI_PROVIDER_NOT_CONFIGURED";
+      const message = this.configurationError || `${this.providerName} is not fully configured.`;
       throw new AppError(503, code, message);
     }
 
@@ -61,23 +62,23 @@ class BharatCodeService {
         ]
       });
     } catch (error) {
-      throw mapProviderError(error);
+      throw mapProviderError(error, this.providerName);
     }
 
     const choice = response?.choices?.[0];
     if (choice?.finish_reason === "length") {
-      throw new AppError(502, "BHARATCODE_INCOMPLETE_RESPONSE", "BharatCode AI returned a truncated response.");
+      throw new AppError(502, "AI_PROVIDER_INCOMPLETE_RESPONSE", `${this.providerName} returned a truncated response.`);
     }
 
     const content = choice?.message?.content;
     if (typeof content !== "string" || !content.trim()) {
-      throw new AppError(502, "INVALID_BHARATCODE_RESPONSE", "BharatCode AI returned an empty response.");
+      throw new AppError(502, "INVALID_AI_PROVIDER_RESPONSE", `${this.providerName} returned an empty response.`);
     }
     return parseFindings(content);
   }
 }
 
-function mapProviderError(error) {
+function mapProviderError(error, providerName = "AI provider") {
   const name = typeof error?.name === "string" ? error.name : "";
   const errorType = typeof error?.constructor?.name === "string" ? error.constructor.name : "";
   const code = typeof error?.code === "string" ? error.code.toLowerCase() : "";
@@ -88,26 +89,26 @@ function mapProviderError(error) {
   if (isErrorType("APIConnectionTimeoutError") || name === "TimeoutError" ||
       name === "AbortError" || code === "etimedout" || code === "err_timeout" ||
       status === 408) {
-    return new AppError(504, "BHARATCODE_TIMEOUT", "BharatCode AI timed out.");
+    return new AppError(504, "AI_PROVIDER_TIMEOUT", `${providerName} timed out.`);
   }
   if (status === 401 || status === 403 || isErrorType("AuthenticationError") ||
       isErrorType("PermissionDeniedError") || code === "invalid_api_key") {
-    return new AppError(502, "BHARATCODE_AUTHENTICATION_FAILED", "The BharatCode API key was rejected or lacks permission.");
+    return new AppError(502, "AI_PROVIDER_AUTHENTICATION_FAILED", `${providerName} rejected the API key or permission.`);
   }
   if (code === "model_not_found" || code === "retired_model" || status === 410 ||
       (status === 400 && /model.*(not found|does not exist|unavailable)|unknown model/.test(message))) {
-    return new AppError(502, "BHARATCODE_MODEL_UNAVAILABLE", "The configured BharatCode model is unavailable.");
+    return new AppError(502, "AI_PROVIDER_MODEL_UNAVAILABLE", `The configured ${providerName} model is unavailable.`);
   }
   if (status === 503) {
-    return new AppError(503, "BHARATCODE_BUSY", "BharatCode AI is busy. Please retry shortly.");
+    return new AppError(503, "AI_PROVIDER_BUSY", `${providerName} is busy. Please retry shortly.`);
   }
   if (status === 429 || isErrorType("RateLimitError")) {
-    return new AppError(502, "BHARATCODE_RATE_LIMITED", "BharatCode rate limit reached.");
+    return new AppError(502, "AI_PROVIDER_RATE_LIMITED", `${providerName} rate limit reached.`);
   }
   if (isErrorType("APIConnectionError")) {
-    return new AppError(502, "BHARATCODE_CONNECTION_FAILED", "Could not connect to BharatCode.");
+    return new AppError(502, "AI_PROVIDER_CONNECTION_FAILED", `Could not connect to ${providerName}.`);
   }
-  return new AppError(502, "BHARATCODE_API_ERROR", "BharatCode AI returned an API error.");
+  return new AppError(502, "AI_PROVIDER_API_ERROR", `${providerName} returned an API error.`);
 }
 
 function prepareContext(changedFiles, documents) {
@@ -135,12 +136,12 @@ function parseFindings(content) {
   try {
     parsed = JSON.parse(normalized);
   } catch {
-    throw new AppError(502, "INVALID_BHARATCODE_RESPONSE", "BharatCode AI returned invalid JSON.");
+    throw new AppError(502, "INVALID_AI_PROVIDER_RESPONSE", "AI provider returned invalid JSON.");
   }
   if (!parsed || !Array.isArray(parsed.findings)) {
-    throw new AppError(502, "INVALID_BHARATCODE_RESPONSE", "BharatCode AI returned an unexpected response shape.");
+    throw new AppError(502, "INVALID_AI_PROVIDER_RESPONSE", "AI provider returned an unexpected response shape.");
   }
   return parsed.findings;
 }
 
-module.exports = { BharatCodeService, mapProviderError, parseFindings, prepareContext };
+module.exports = { OpenAICompatibleService, mapProviderError, parseFindings, prepareContext };

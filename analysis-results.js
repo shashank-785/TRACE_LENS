@@ -25,7 +25,7 @@ const repositoryInput = document.getElementById("repositoryUrl");
 const validateRepositoryButton = document.getElementById("validateRepositoryButton");
 const pullRequestSelect = document.getElementById("pullRequestSelect");
 const analyzePullRequestButton = document.getElementById("analyzePullRequestButton");
-const useBharatCodeCheckbox = document.getElementById("useBharatCode");
+const useAIProviderCheckbox = document.getElementById("useAi");
 const backendStatus = document.getElementById("backendStatus");
 const workflowStatus = document.getElementById("workflowStatus");
 const API_BASE_URL = `${window.location.origin}/api`;
@@ -77,9 +77,10 @@ function renderFindings() {
 
   findingsList.innerHTML = visible.map((finding) => {
     const reviewed = finding.status !== "Open";
+    const confidence = ["High", "Medium", "Low"].includes(finding.confidence) ? finding.confidence : "";
     return `<article class="finding-card">
       <div class="finding-card-heading">
-        <div class="finding-badges"><span class="finding-severity ${finding.severity.toLowerCase()}"><i></i>${escapeHtml(finding.severity)}</span><span class="finding-status ${finding.status.toLowerCase()}">${escapeHtml(finding.status)}</span></div>
+        <div class="finding-badges"><span class="finding-severity ${finding.severity.toLowerCase()}"><i></i>${escapeHtml(finding.severity)}</span><span class="finding-status ${finding.status.toLowerCase()}">${escapeHtml(finding.status)}</span>${confidence ? `<span class="finding-confidence" aria-label="Evidence confidence">${escapeHtml(confidence)} evidence confidence</span>` : ""}</div>
         <span class="finding-id">${escapeHtml(finding.id)}</span>
       </div>
       <h3 class="finding-title">${escapeHtml(finding.title)}</h3>
@@ -154,19 +155,23 @@ async function checkBackendHealth() {
     backendStatus.textContent = "Backend online";
     backendStatus.classList.remove("offline");
     backendStatus.classList.add("online");
-    useBharatCodeCheckbox.disabled = !health.ai.configured;
+    useAIProviderCheckbox.disabled = !health.ai.configured;
+    const provider = health.ai.provider || "AI provider";
     if (health.ai.configurationError) {
-      setWorkflowStatus(`BharatCode configuration issue: ${health.ai.configurationError} Rule-based analysis will be used.`);
+      setWorkflowStatus(`${provider} configuration issue: ${health.ai.configurationError} Rule-based analysis will be used.`);
     } else if (health.ai.configured) {
-      setWorkflowStatus("Backend ready. BharatCode credentials are configured; provider connectivity is confirmed only when an AI request succeeds. Rule-based analysis remains available.");
+      setWorkflowStatus(`Backend ready. ${provider} credentials are configured; provider connectivity is confirmed only when an AI request succeeds. Rule-based analysis remains available.`);
     } else {
-      setWorkflowStatus("Backend ready. BharatCode AI is not configured; rule-based analysis will be used.");
+      const missing = Array.isArray(health.ai.missingSettings) && health.ai.missingSettings.length
+        ? ` Missing settings: ${health.ai.missingSettings.join(", ")}.`
+        : "";
+      setWorkflowStatus(`Backend ready. ${provider} is not configured; rule-based analysis will be used.${missing}`);
     }
   } catch (error) {
     backendStatus.textContent = "Backend offline";
     backendStatus.classList.remove("online");
     backendStatus.classList.add("offline");
-    useBharatCodeCheckbox.disabled = true;
+    useAIProviderCheckbox.disabled = true;
     setWorkflowStatus(`${error.message} Sample findings remain visible.`, "error");
   }
 }
@@ -242,7 +247,7 @@ function getSelectedAnalysisRequest() {
     owner: validatedRepository.owner,
     repo: validatedRepository.name,
     pullNumber: Number(pullRequestSelect.value),
-    useAi: useBharatCodeCheckbox.checked
+    useAi: useAIProviderCheckbox.checked
   };
 }
 

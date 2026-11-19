@@ -2,7 +2,7 @@
 
 TRACE LENS compares changes in a GitHub pull request with repository documentation and reports only findings that include evidence from the pull request diff and fetched documentation.
 
-The frontend is served by the optional Express backend. Without GitHub or BharatCode credentials, the server still starts; public GitHub repositories can be checked without a token and analysis uses local rules.
+The frontend is served by the Express backend. Without GitHub or AI-provider credentials, the server still starts; public GitHub repositories can be checked without a token and analysis uses local rules.
 
 ## Run locally
 
@@ -30,16 +30,16 @@ Set these in the root `.env` for local development or in the Render service sett
 | --- | --- | --- |
 | `PORT` | No | HTTP port; defaults to `3000`. Render can supply this automatically. |
 | `GITHUB_TOKEN` | No | Optional server-side token for GitHub REST API rate limits. Public repositories work without it. |
-| `BHARATCODE_API_KEY` | No | BharatCode API credential. Leave empty to use rule-based analysis. |
-| `BHARATCODE_BASE_URL` | No | OpenAI-compatible BharatCode API base URL; defaults to `https://bharatcode.ai/api/model/v1`. Override only when needed. |
-| `BHARATCODE_MODEL` | No | Model identifier configured for the BharatCode endpoint. Required with `BHARATCODE_API_KEY` to enable AI; TRACE LENS does not assume a model name. |
+| `AI_API_KEY` | No | Server-side API key. Required with `AI_BASE_URL` and `AI_MODEL`; otherwise rule-based analysis is used. |
+| `AI_BASE_URL` | No | HTTPS base URL for an OpenAI-compatible Chat Completions API. The provider endpoint is never called unless the key, base URL, and model are all configured. |
+| `AI_MODEL` | No | Model identifier supported by the configured provider. Required with `AI_API_KEY` and `AI_BASE_URL`. |
 | `CORS_ORIGIN` | No | Comma-separated exact browser origins allowed to call the API; defaults to local frontend preview origins. |
 
-Copy `.env.example` to `.env` if it does not already exist. Add `BHARATCODE_API_KEY` and a model identifier currently listed for your account in the [BharatCode developer API documentation](https://bharatcode.ai/build); the API's `GET /models` endpoint lists available models. The default `BHARATCODE_BASE_URL` is `https://bharatcode.ai/api/model/v1`; override it only when required. AI remains disabled if the API key or model is blank, and the server continues with rule-based analysis. `.env` is ignored by Git. Never place credentials in frontend files or commit `.env`.
+Copy `.env.example` to `.env` if it does not already exist. Configure `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` using values from your provider. TRACE LENS uses the OpenAI-compatible Chat Completions request format; providers with a different API format are not supported by this adapter. The base URL must use HTTPS. The legacy `BHARATCODE_API_KEY`, `BHARATCODE_BASE_URL`, and `BHARATCODE_MODEL` variables remain supported when no generic `AI_*` value is configured; the legacy URL defaults to `https://bharatcode.ai/api/model/v1`. `.env` is ignored by Git. Never place credentials in frontend files or commit `.env`.
 
-BharatCode analysis is opt-in in the UI. When enabled, the selected public pull request diff and fetched documentation are sent to BharatCode. `/api/health` reports whether the required settings are present; it does not test provider connectivity. An AI result is reported as used only after a successful, complete provider response has been parsed.
+AI analysis is opt-in in the UI. When enabled, the selected public pull request diff and fetched documentation are sent to the configured provider. `/api/health` reports whether settings are complete; it does not test provider connectivity. An AI result is reported as used only after a successful, complete response has been parsed and its evidence verified.
 
-On Render, add `BHARATCODE_API_KEY` and `BHARATCODE_MODEL` in the web service's **Environment** settings to enable AI. Choose a model currently available to the account; do not assume that a model ID remains available or included in every plan. `BHARATCODE_BASE_URL` is optional and should be set only to override the default endpoint. Keep the key in Render's environment settings; do not add it to `render.yaml`.
+On Render, add `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` in the web service's **Environment** settings to enable AI. Keep the key in Render's environment settings; do not add it to `render.yaml`. AI is optional and does not block rule-based analysis or deployment.
 
 ## API
 
@@ -61,6 +61,7 @@ All responses use `{ "success": true, "data": ... }` or `{ "success": false, "er
 - Only public GitHub repositories are supported. Private repositories are rejected even if `GITHUB_TOKEN` can access them; per-user GitHub authorization is not implemented.
 - GitHub credentials stay on the backend. `GITHUB_TOKEN` is never sent to the browser.
 - The analyzer checks changed lines against retrieved documentation. AI findings are kept only when both evidence excerpts exactly match the supplied diff and documentation. The rule-based fallback checks changed configuration values and newly exported symbols absent from the fetched docs; it does not claim to understand every kind of documentation drift.
+- Findings include qualitative evidence confidence, not a probability: exact value/range comparisons are high, evidence-verified AI findings are medium, and symbols absent from the limited fetched documentation set are low.
 - Pull request analysis is limited to 300 changed files, 12 documentation files, 64 KB per documentation file, and 240 KB of documentation total. Larger repositories or diffs may produce incomplete results.
 - Analysis results are held in memory for up to 30 minutes and are lost when the process restarts.
 - The pull request analysis endpoint does not require user authentication and is limited to five requests per client IP per minute. This uses an in-memory limiter, so counts reset when the process restarts and are not shared across service instances; treat it as basic abuse mitigation, not authentication or a durable global quota.
@@ -81,6 +82,6 @@ The included `render.yaml` configures the service. If setting it up manually, le
 2. **Start Command:** `npm --prefix backend start`
 3. **Health Check Path:** `/api/health`
 
-The service uses Render's `PORT` automatically and can start without API credentials. Public repository analysis uses GitHub's unauthenticated API by default; add an optional `GITHUB_TOKEN` only through Render's environment settings if needed for rate limits. Keep BharatCode credentials unset unless AI analysis is intentionally enabled. Because the frontend and API share an origin, a separate static site and production API URL are not needed.
+The service uses Render's `PORT` automatically and can start without API credentials. Public repository analysis uses GitHub's unauthenticated API by default; add an optional `GITHUB_TOKEN` only through Render's environment settings if needed for rate limits. Set `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` only if AI analysis is intentionally enabled. Because the frontend and API share an origin, a separate static site and production API URL are not needed.
 
 Render's free web services may spin down after inactivity, causing a delay on the first request. Analysis results are in memory and disappear when the service restarts.

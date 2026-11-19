@@ -5,9 +5,9 @@ const { once } = require("node:events");
 const test = require("node:test");
 const OpenAI = require("openai");
 const { createApp } = require("../src/app");
-const { DEFAULT_BHARATCODE_BASE_URL, loadBharatCodeSettings } = require("../src/config/bharatcode");
+const { DEFAULT_BHARATCODE_BASE_URL, loadAIProviderSettings } = require("../src/config/ai-provider");
 const { AnalysisService, verifyAiFinding } = require("../src/services/analysis-service");
-const { BharatCodeService, parseFindings } = require("../src/services/bharatcode-service");
+const { OpenAICompatibleService } = require("../src/services/openai-compatible-service");
 const { GitHubService } = require("../src/services/github-service");
 const { analyzeWithRules } = require("../src/services/rule-analysis");
 const { AppError } = require("../src/utils/app-error");
@@ -37,6 +37,7 @@ test("rule analysis reports only a code value that conflicts with an actual docu
   const findings = analyzeWithRules(changedFiles, documents);
   assert.equal(findings.length, 1);
   assert.equal(findings[0].severity, "Medium");
+  assert.equal(findings[0].confidence, "High");
   assert.equal(findings[0].codeFile, "src/config/http.js");
   assert.equal(findings[0].docsFile, "README.md");
   assert.equal(findings[0].codeEvidence, "requestTimeoutMs: 30000");
@@ -122,6 +123,7 @@ test("rule analysis detects changed supported ranges against documented ranges",
   const findings = analyzeWithRules(rangeChange, rangeDocs);
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].confidence, "High");
   assert.equal(findings[0].codeEvidence, "if (days < 1 || days > 14) throw new RangeError(\"days must be between 1 and 14\");");
   assert.equal(findings[0].docsEvidence, rangeDocs[0].content);
   assert.deepEqual(
@@ -217,11 +219,12 @@ test("rule analysis notes a newly exported symbol absent from the fetched docs",
   );
   assert.equal(findings.length, 1);
   assert.equal(findings[0].severity, "Low");
+  assert.equal(findings[0].confidence, "Low");
   assert.match(findings[0].docsEvidence, /createInvoice/);
   assert.match(findings[0].codeEvidence, /export function createInvoice/);
 });
 
-test("BharatCode client uses its configured endpoint and model with an OpenAI-compatible response", async () => {
+test("OpenAI-compatible provider uses configured endpoint, credentials, and model", async () => {
   let request;
   const baseURL = "https://bharatcode.example.test/api/model/v1";
   const mockClient = createMockOpenAIClient(async (url, options) => {
@@ -232,7 +235,7 @@ test("BharatCode client uses its configured endpoint and model with an OpenAI-co
     };
     return mockChatCompletionResponse("{\"findings\":[]}");
   }, { baseURL });
-  const ai = new BharatCodeService({
+  const ai = new OpenAICompatibleService({
     apiKey: "test-key-not-sent",
     baseURL,
     model: "configured-test-model",
@@ -256,15 +259,15 @@ test("BharatCode client uses its configured endpoint and model with an OpenAI-co
   assert.equal(JSON.stringify(request.body).includes("test-key-not-sent"), false);
 });
 
-test("BharatCode rejects malformed and truncated model responses", async () => {
+test("OpenAI-compatible provider rejects malformed and truncated model responses", async () => {
   const responses = [
-    { content: "not json", expected: "INVALID_BHARATCODE_RESPONSE" },
-    { content: "{\"unexpected\":[]}", expected: "INVALID_BHARATCODE_RESPONSE" },
-    { content: "{\"findings\":[]}", finishReason: "length", expected: "BHARATCODE_INCOMPLETE_RESPONSE" }
+    { content: "not json", expected: "INVALID_AI_PROVIDER_RESPONSE" },
+    { content: "{\"unexpected\":[]}", expected: "INVALID_AI_PROVIDER_RESPONSE" },
+    { content: "{\"findings\":[]}", finishReason: "length", expected: "AI_PROVIDER_INCOMPLETE_RESPONSE" }
   ];
 
   for (const response of responses) {
-    const ai = new BharatCodeService({
+    const ai = new OpenAICompatibleService({
       apiKey: "test-key-not-sent",
       baseURL: DEFAULT_BHARATCODE_BASE_URL,
       model: "configured-test-model"
@@ -278,69 +281,79 @@ test("BharatCode rejects malformed and truncated model responses", async () => {
   }
 });
 
-test("BharatCode settings default and validate the endpoint and require the key and model", async () => {
-  const missingCredentials = loadBharatCodeSettings({});
-  assert.equal(missingCredentials.baseURL, DEFAULT_BHARATCODE_BASE_URL);
-  const missingService = new BharatCodeService(missingCredentials);
+test("generic AI settings validate all required provider values and preserve BharatCode aliases", async () => {
+  const missingCredentials = loadAIProviderSettings({});
+  assert.equal(missingCredentials.providerName, "OpenAI-compatible provider");
+  assert.equal(missingCredentials.baseURL, "");
+  const missingService = new OpenAICompatibleService(missingCredentials);
   assert.equal(missingService.configured, false);
+  assert.deepEqual(missingService.missingSettings, ["AI_API_KEY", "AI_BASE_URL", "AI_MODEL"]);
   await assert.rejects(missingService.analyze({
     pullRequest: { number: 2, title: "Test change", body: "" },
     changedFiles,
     documents
-  }), (error) => error.code === "BHARATCODE_NOT_CONFIGURED");
+  }), (error) => error.code === "AI_PROVIDER_NOT_CONFIGURED");
 
-  assert.equal(new BharatCodeService(loadBharatCodeSettings({
-    BHARATCODE_MODEL: "configured-test-model"
+  assert.equal(new OpenAICompatibleService(loadAIProviderSettings({
+    AI_MODEL: "configured-test-model"
   })).configured, false);
-  assert.equal(new BharatCodeService(loadBharatCodeSettings({
-    BHARATCODE_API_KEY: "test-key-not-sent"
+  assert.equal(new OpenAICompatibleService(loadAIProviderSettings({
+    AI_API_KEY: "test-key-not-sent"
   })).configured, false);
 
-  const configured = loadBharatCodeSettings({
-    BHARATCODE_API_KEY: "test-key-not-sent",
-    BHARATCODE_MODEL: "configured-test-model"
+  const configured = loadAIProviderSettings({
+    AI_API_KEY: "test-key-not-sent",
+    AI_BASE_URL: "https://provider.example.test/v1",
+    AI_MODEL: "configured-test-model"
   });
-  assert.equal(new BharatCodeService(configured).configured, true);
-  assert.equal(new BharatCodeService(configured).client.baseURL, DEFAULT_BHARATCODE_BASE_URL);
+  assert.equal(configured.providerName, "OpenAI-compatible provider");
+  assert.equal(new OpenAICompatibleService(configured).configured, true);
+  assert.equal(new OpenAICompatibleService(configured).client.baseURL, "https://provider.example.test/v1");
 
-  const override = loadBharatCodeSettings({
+  const legacy = loadAIProviderSettings({
     BHARATCODE_API_KEY: "test-key-not-sent",
-    BHARATCODE_MODEL: "configured-test-model",
-    BHARATCODE_BASE_URL: "https://bharatcode.example.test/v1"
+    BHARATCODE_MODEL: "legacy-test-model"
   });
-  assert.equal(override.baseURL, "https://bharatcode.example.test/v1");
-  assert.equal(new BharatCodeService(override).client.baseURL, "https://bharatcode.example.test/v1");
-  assert.equal(loadBharatCodeSettings({ BHARATCODE_BASE_URL: "  " }).baseURL, DEFAULT_BHARATCODE_BASE_URL);
+  assert.equal(legacy.providerName, "BharatCode");
+  assert.equal(legacy.baseURL, DEFAULT_BHARATCODE_BASE_URL);
+  assert.equal(new OpenAICompatibleService(legacy).client.baseURL, DEFAULT_BHARATCODE_BASE_URL);
+  assert.equal(loadAIProviderSettings({
+    BHARATCODE_API_KEY: "legacy-key",
+    BHARATCODE_MODEL: "legacy-model",
+    AI_API_KEY: "generic-key",
+    AI_BASE_URL: "https://provider.example.test/v1",
+    AI_MODEL: "generic-model"
+  }).providerName, "OpenAI-compatible provider");
 
-  const invalid = loadBharatCodeSettings({
-    BHARATCODE_API_KEY: "test-key-not-sent",
-    BHARATCODE_MODEL: "configured-test-model",
-    BHARATCODE_BASE_URL: "http://example.test/v1"
+  const invalid = loadAIProviderSettings({
+    AI_API_KEY: "test-key-not-sent",
+    AI_MODEL: "configured-test-model",
+    AI_BASE_URL: "http://example.test/v1"
   });
-  const invalidService = new BharatCodeService(invalid);
-  assert.equal(invalid.configurationError, "BHARATCODE_BASE_URL must be a valid HTTPS URL.");
+  const invalidService = new OpenAICompatibleService(invalid);
+  assert.equal(invalid.configurationError, "AI_BASE_URL must be a valid HTTPS URL.");
   assert.equal(invalidService.configured, false);
   assert.equal(invalidService.client, null);
   await assert.rejects(invalidService.analyze({
     pullRequest: { number: 2, title: "Test change", body: "" },
     changedFiles,
     documents
-  }), (error) => error.code === "BHARATCODE_INVALID_CONFIGURATION");
+  }), (error) => error.code === "AI_PROVIDER_INVALID_CONFIGURATION");
 
-  assert.match(loadBharatCodeSettings({ BHARATCODE_BASE_URL: "not a URL" }).configurationError, /valid HTTPS URL/);
+  assert.match(loadAIProviderSettings({ AI_BASE_URL: "not a URL" }).configurationError, /valid HTTPS URL/);
 });
 
-test("BharatCode maps API authentication, model, rate-limit, busy, and timeout errors", async () => {
+test("OpenAI-compatible provider maps authentication, model, rate-limit, busy, and timeout errors", async () => {
   const failures = [
-    { status: 401, code: "invalid_api_key", expected: "BHARATCODE_AUTHENTICATION_FAILED" },
-    { status: 429, code: "rate_limit_exceeded", expected: "BHARATCODE_RATE_LIMITED" },
-    { status: 410, code: "retired_model", expected: "BHARATCODE_MODEL_UNAVAILABLE" },
-    { status: 503, code: "server_busy", expected: "BHARATCODE_BUSY" },
-    { status: 500, code: "provider_error", expected: "BHARATCODE_API_ERROR" }
+    { status: 401, code: "invalid_api_key", expected: "AI_PROVIDER_AUTHENTICATION_FAILED" },
+    { status: 429, code: "rate_limit_exceeded", expected: "AI_PROVIDER_RATE_LIMITED" },
+    { status: 410, code: "retired_model", expected: "AI_PROVIDER_MODEL_UNAVAILABLE" },
+    { status: 503, code: "server_busy", expected: "AI_PROVIDER_BUSY" },
+    { status: 500, code: "provider_error", expected: "AI_PROVIDER_API_ERROR" }
   ];
 
   for (const failure of failures) {
-    const ai = new BharatCodeService({
+    const ai = new OpenAICompatibleService({
       apiKey: "test-key-not-sent",
       baseURL: DEFAULT_BHARATCODE_BASE_URL,
       model: "configured-test-model"
@@ -363,7 +376,7 @@ test("BharatCode maps API authentication, model, rate-limit, busy, and timeout e
     });
   }
 
-  const timeoutService = new BharatCodeService({
+  const timeoutService = new OpenAICompatibleService({
     apiKey: "test-key-not-sent",
     baseURL: DEFAULT_BHARATCODE_BASE_URL,
     model: "configured-test-model",
@@ -377,7 +390,7 @@ test("BharatCode maps API authentication, model, rate-limit, busy, and timeout e
     pullRequest: { number: 2, title: "Test change", body: "" },
     changedFiles,
     documents
-  }), (error) => error.code === "BHARATCODE_TIMEOUT");
+  }), (error) => error.code === "AI_PROVIDER_TIMEOUT");
 });
 
 test("AI evidence is retained only when both excerpts exist in fetched sources", () => {
@@ -458,13 +471,18 @@ test("analysis uses rule fallback when AI is not configured and stores retrievab
   };
   const analysis = new AnalysisService({
     githubService,
-    bharatCodeService: { configured: false, analyze: async () => assert.fail("AI should not be called") }
+    aiService: {
+      configured: false,
+      providerName: "Example Provider",
+      missingSettings: ["AI_API_KEY"],
+      analyze: async () => assert.fail("AI should not be called")
+    }
   });
   const result = await analysis.analyzePullRequest({ owner: "acme", repo: "payments", pullNumber: 8, useAi: true });
 
   assert.equal(result.provider, "rules");
   assert.equal(result.ai.used, false);
-  assert.match(result.warnings.join(" "), /not configured/);
+  assert.match(result.warnings.join(" "), /not fully configured/);
   assert.equal(result.findings.length, 1);
   assert.deepEqual(documentationRankedWith, changedFiles);
   assert.deepEqual(analysis.getResult(result.analysisId), result);
@@ -491,21 +509,23 @@ test("analysis discards unverified AI findings and keeps verified results", asyn
   });
   const analysis = new AnalysisService({
     githubService,
-    bharatCodeService: {
+    aiService: {
       configured: true,
+      providerName: "Example Provider",
       analyze: async () => [validAiFinding, { ...validAiFinding, codeEvidence: "invented code" }]
     }
   });
   const result = await analysis.analyzePullRequest({ owner: "acme", repo: "payments", pullNumber: 8, useAi: true });
 
-  assert.equal(result.provider, "BharatCode + rules");
-  assert.ok(result.findings.some((finding) => finding.source === "bharatcode"));
+  assert.equal(result.provider, "Example Provider + rules");
+  assert.ok(result.findings.some((finding) => finding.source === "ai"));
+  assert.equal(result.findings.find((finding) => finding.source === "ai").confidence, "Medium");
   assert.ok(result.warnings.some((warning) => warning.includes("discarded")));
   assert.equal(result.findings.filter((finding) => finding.codeEvidence === "invented code").length, 0);
 });
 
-test("analysis falls back to rules after a BharatCode request failure", async () => {
-  const bharatCodeService = new BharatCodeService({
+test("analysis falls back to rules after a provider request failure", async () => {
+  const aiService = new OpenAICompatibleService({
     apiKey: "test-key-not-sent",
     baseURL: DEFAULT_BHARATCODE_BASE_URL,
     model: "configured-test-model"
@@ -518,7 +538,7 @@ test("analysis falls back to rules after a BharatCode request failure", async ()
   }), { status: 500, headers: { "content-type": "application/json" } })));
   const analysis = new AnalysisService({
     githubService: createMockGitHubService(),
-    bharatCodeService
+    aiService
   });
   const result = await analysis.analyzePullRequest({ owner: "acme", repo: "payments", pullNumber: 8, useAi: true });
 
@@ -638,7 +658,7 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
       getPullRequestFiles: async () => ({ files: changedFiles, truncated: false }),
       getDocumentation: async () => ({ documents, truncated: false })
     },
-    bharatCodeService: { configured: false },
+    aiService: { providerName: "Example Provider", configured: false, missingSettings: [] },
     analysisService: {
       analyzePullRequest: async ({ useAi }) => {
         analysisRequestCount += 1;
@@ -650,7 +670,7 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
       }
     }
   };
-  const app = createApp({ services });
+  const app = createApp({ services, corsOrigins: ["https://frontend.example"] });
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = `http://127.0.0.1:${server.address().port}`;
@@ -661,6 +681,17 @@ test("API routes return consistent JSON, validate inputs, and serve the frontend
     assert.equal(health.data.status, "ok");
     assert.equal(health.data.ai.connectivity, "not_checked");
     assert.equal(health.data.ai.configured, false);
+    assert.equal(health.data.ai.provider, "Example Provider");
+    assert.equal(JSON.stringify(health).includes("apiKey"), false);
+
+    const allowedOrigin = await fetch(`${address}/api/health`, {
+      headers: { Origin: "https://frontend.example" }
+    });
+    assert.equal(allowedOrigin.headers.get("access-control-allow-origin"), "https://frontend.example");
+    const deniedOrigin = await fetch(`${address}/api/health`, {
+      headers: { Origin: "https://untrusted.example" }
+    });
+    assert.equal(deniedOrigin.headers.get("access-control-allow-origin"), null);
 
     const invalid = await fetch(`${address}/api/repositories/validate`, {
       method: "POST",

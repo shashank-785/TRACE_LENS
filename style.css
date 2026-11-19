@@ -513,6 +513,7 @@ h1 { font-family: var(--display); font-size: 23px; letter-spacing: -.5px; font-w
 .finding-card-heading { justify-content: space-between; }
 .finding-badges { flex-wrap: wrap; }
 .finding-severity, .finding-status { min-height: 20px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border: 1px solid; border-radius: 4px; font: 8px var(--mono); }
+.finding-confidence { color: #b7a9c7; font: 8px var(--mono); }
 .finding-severity i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .finding-severity.high { border-color: rgba(251,113,133,.25); color: #ff8293; background: rgba(213,71,94,.1); }
 .finding-severity.medium { border-color: rgba(243,184,78,.22); color: #e6b65d; background: rgba(192,134,48,.08); }

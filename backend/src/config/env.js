@@ -2,7 +2,7 @@
 
 const path = require("node:path");
 const dotenv = require("dotenv");
-const { loadBharatCodeSettings } = require("./bharatcode");
+const { loadAIProviderSettings } = require("./ai-provider");
 
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
@@ -23,5 +23,5 @@ module.exports = Object.freeze({
   port: parsePort(process.env.PORT),
   githubToken: (process.env.GITHUB_TOKEN || "").trim(),
   corsOrigins,
-  bharatCode: loadBharatCodeSettings()
+  aiProvider: loadAIProviderSettings()
 });
